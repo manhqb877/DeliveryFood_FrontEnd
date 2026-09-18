@@ -94,23 +94,23 @@ export default function OrderHeader() {
             </div>
           </Link>
 
-          {/* Track Order Button (Header) - Only show when NOT scrolled maybe? Or always? */}
+          {/* Track Order Button (Header) */}
           <Link
             href="#"
-            className="hidden sm:flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-full hover:border-[var(--color-primary)] text-gray-700 hover:text-[var(--color-primary-dark)] font-bold text-[13px] transition-all bg-white h-[36px] cursor-pointer shadow-sm group"
+            className="hidden sm:flex items-center gap-1.5 px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[#1a1a1a] rounded-full font-bold text-[13px] transition-all h-[36px] cursor-pointer shadow-sm group"
           >
-            <TruckIcon className="w-4 h-4 transition-transform" />
+            <TruckIcon className="w-4 h-4" />
             <span>Tra cứu đơn</span>
           </Link>
 
           {/* Cart Icon */}
           <Link
             href="/cart"
-            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-full hover:border-[var(--color-primary)] transition-colors bg-white h-[36px] cursor-pointer shadow-sm group"
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[#1a1a1a] rounded-full transition-colors h-[36px] cursor-pointer shadow-sm group"
           >
-            <ShoppingCartIcon className="w-4 h-4 text-gray-700 group-hover:text-[var(--color-primary-dark)] transition-colors" />
+            <ShoppingCartIcon className="w-4 h-4 text-[#1a1a1a]" />
             <span className="text-[13px] font-bold text-[#1a1a1a] hidden sm:inline">Giỏ hàng</span>
-            <span className="bg-gray-100 group-hover:bg-[var(--color-primary)] text-gray-800 group-hover:text-black text-[12px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center transition-colors">
+            <span className="bg-white/80 group-hover:bg-white text-black text-[12px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center transition-colors">
               0
             </span>
           </Link>
