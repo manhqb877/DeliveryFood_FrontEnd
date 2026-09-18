@@ -11,6 +11,8 @@ const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin", "vietnamese"],
 });
 
+import Providers from "@/components/Providers";
+
 export const metadata = {
   title: "DeliveryFood",
   description: "Đặt đồ ăn giao hàng siêu tốc",
@@ -22,7 +24,9 @@ export default function RootLayout({ children }) {
       lang="vi"
       className={`${quicksand.variable} ${plusJakartaSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans bg-gray-50">{children}</body>
+      <body className="min-h-full flex flex-col font-sans bg-gray-50">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
