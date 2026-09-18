@@ -124,10 +124,6 @@ export default function ProfilePage() {
             <span className="text-gray-900 font-semibold">Hồ sơ của tôi</span>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>API: /api/v1/auth/me</span>
-          </div>
         </div>
       </div>
 
@@ -226,7 +222,6 @@ export default function ProfilePage() {
                 <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-5">
                   <div>
                     <h1 className="text-xl font-bold text-gray-900">Thông tin tài khoản</h1>
-                    <p className="text-xs text-gray-500 mt-0.5">Dữ liệu thực tế được nạp từ endpoint <code className="bg-gray-100 px-1 py-0.5 rounded text-[11px] text-gray-700 font-mono">/api/v1/auth/me</code></p>
                   </div>
                   <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -303,37 +298,7 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Thông tin xác thực bổ sung */}
-              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                <h3 className="text-sm font-bold text-gray-900 mb-3">Trạng thái bảo mật & Khu vực</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/40 border border-emerald-100 text-xs">
-                    <div className="flex items-center gap-2">
-                      <CheckBadgeIcon className="w-5 h-5 text-emerald-600 shrink-0" />
-                      <div>
-                        <p className="font-bold text-gray-800">Xác thực Token JWT & Redis Blacklist</p>
-                        <p className="text-[11px] text-gray-500">Phiên đăng nhập được mã hóa an toàn qua Spring Security</p>
-                      </div>
-                    </div>
-                    <span className="font-bold text-emerald-700 shrink-0">Bảo vệ</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100 text-xs">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheckIcon className="w-5 h-5 text-gray-500 shrink-0" />
-                      <div>
-                        <p className="font-bold text-gray-800">Khu vực hoạt động (Area ID)</p>
-                        <p className="text-[11px] text-gray-500">
-                          {currentData.areaId ? `Mã khu vực: #${currentData.areaId}` : 'Mặc định toàn quốc / Chưa gán khu vực riêng'}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-gray-600 font-medium">
-                      {currentData.isAreaVerified ? 'Đã xác minh' : 'Chưa cần xác minh'}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              {/* Bỏ phần thông tin xác thực bổ sung theo yêu cầu */}
             </div>
           </div>
         ) : null}

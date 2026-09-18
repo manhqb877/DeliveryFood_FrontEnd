@@ -24,7 +24,7 @@ export default function LoginPage() {
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regOtp, setRegOtp] = useState('');
-  const [regStep, setRegStep] = useState(1); // 1: Info, 2: OTP
+  const [regStep, setRegStep] = useState(1); // 1: Info, 2: OTP, 3: Password
   const regRole = 'CUSTOMER';
 
   // Forgot password states
@@ -117,10 +117,6 @@ export default function LoginPage() {
       setErrorMsg('Vui lòng nhập Email để nhận mã xác nhận');
       return;
     }
-    if (!regPassword || regPassword.length < 6) {
-      setErrorMsg('Mật khẩu phải có tối thiểu 6 ký tự');
-      return;
-    }
 
     setIsSubmitting(true);
     try {
@@ -134,14 +130,37 @@ export default function LoginPage() {
     }
   };
 
-  // Xử lý Submit Đăng ký
-  const handleRegisterSubmit = async (e) => {
+  // Xác nhận OTP đăng ký
+  const handleRegisterVerifyOtp = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
     if (!regOtp.trim()) {
       setErrorMsg('Vui lòng nhập mã OTP');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await authService.verifyRegisterOtp({ email: regEmail.trim(), otp: regOtp.trim() });
+      setRegStep(3);
+      setSuccessMsg('Mã OTP hợp lệ. Vui lòng tạo mật khẩu cho tài khoản.');
+    } catch (err) {
+      setErrorMsg(err.message || 'Mã OTP không hợp lệ hoặc đã hết hạn.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Xử lý Submit Đăng ký
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!regPassword || regPassword.length < 6) {
+      setErrorMsg('Mật khẩu phải có tối thiểu 6 ký tự');
       return;
     }
 
@@ -567,21 +586,6 @@ export default function LoginPage() {
               />
             </div>
 
-            <div className="mb-4">
-              <label className="block text-[13px] font-bold text-[#333] mb-1">
-                Mật khẩu <span className="text-yellow-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={regPassword}
-                onChange={(e) => setRegPassword(e.target.value)}
-                placeholder="Tối thiểu 6 ký tự"
-                required
-                disabled={isSubmitting}
-                className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
-              />
-            </div>
-
             <button
               type="submit"
               disabled={isSubmitting}
@@ -599,8 +603,8 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-          ) : (
-            <form className="max-w-[450px] mx-auto" onSubmit={handleRegisterSubmit}>
+          ) : regStep === 2 ? (
+            <form className="max-w-[450px] mx-auto" onSubmit={handleRegisterVerifyOtp}>
               <div className="mb-4">
                 <label className="block text-[13px] font-bold text-[#333] mb-1">
                   Mã OTP (gửi qua {regEmail}) <span className="text-yellow-500">*</span>
@@ -635,6 +639,35 @@ export default function LoginPage() {
                   type="submit"
                   disabled={isSubmitting}
                   className={`w-2/3 rounded-[20px] bg-[var(--color-primary)] py-2.5 font-bold text-black transition-all hover:bg-[var(--color-primary-dark)] shadow-sm flex items-center justify-center gap-2 ${
+                    isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                  }`}
+                >
+                  {isSubmitting ? 'Đang xử lý...' : 'Tiếp tục'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className="max-w-[450px] mx-auto" onSubmit={handleRegisterSubmit}>
+              <div className="mb-4">
+                <label className="block text-[13px] font-bold text-[#333] mb-1">
+                  Tạo mật khẩu cho tài khoản <span className="text-yellow-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  placeholder="Tối thiểu 6 ký tự"
+                  required
+                  disabled={isSubmitting}
+                  className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
+                />
+              </div>
+              
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`w-full rounded-[20px] bg-[var(--color-primary)] py-2.5 font-bold text-black transition-all hover:bg-[var(--color-primary-dark)] shadow-sm flex items-center justify-center gap-2 ${
                     isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
                   }`}
                 >

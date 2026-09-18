@@ -13,6 +13,18 @@ export const authService = {
   },
 
   /**
+   * Xác nhận OTP đăng ký
+   * POST /api/v1/auth/register/verify-otp
+   */
+  async verifyRegisterOtp({ email, otp }) {
+    const res = await api.post('/auth/register/verify-otp', {
+      email: email?.trim(),
+      otp: otp?.trim(),
+    });
+    return res.data;
+  },
+
+  /**
    * Đăng ký tài khoản mới (CUSTOMER, SHOP_MANAGER, SHIPPER)
    * POST /api/v1/auth/register
    */
