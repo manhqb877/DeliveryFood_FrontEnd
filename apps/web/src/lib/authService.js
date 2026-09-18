@@ -2,13 +2,25 @@ import { api, setAuthSession, clearAuthSession, TOKEN_KEYS, getAccessToken } fro
 
 export const authService = {
   /**
+   * Gửi OTP đăng ký qua Email
+   * POST /api/v1/auth/register/send-otp
+   */
+  async sendRegisterOtp({ email }) {
+    const res = await api.post('/auth/register/send-otp', {
+      email: email?.trim(),
+    });
+    return res.data;
+  },
+
+  /**
    * Đăng ký tài khoản mới (CUSTOMER, SHOP_MANAGER, SHIPPER)
    * POST /api/v1/auth/register
    */
-  async register({ phone, email, fullName, password, role = 'CUSTOMER', areaId = null }) {
+  async register({ phone, email, otp, fullName, password, role = 'CUSTOMER', areaId = null }) {
     const res = await api.post('/auth/register', {
       phone: phone?.trim(),
-      email: email?.trim() || null,
+      email: email?.trim(),
+      otp: otp?.trim(),
       fullName: fullName?.trim(),
       password,
       role,
@@ -67,6 +79,18 @@ export const authService = {
   async sendForgotPasswordOtp({ email }) {
     const res = await api.post('/auth/forgot-password/send-otp', {
       email: email?.trim(),
+    });
+    return res.data;
+  },
+
+  /**
+   * Xác nhận OTP khôi phục mật khẩu
+   * POST /api/v1/auth/forgot-password/verify-otp
+   */
+  async verifyForgotPasswordOtp({ email, otp }) {
+    const res = await api.post('/auth/forgot-password/verify-otp', {
+      email: email?.trim(),
+      otp: otp?.trim(),
     });
     return res.data;
   },
