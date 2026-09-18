@@ -23,6 +23,8 @@ export default function LoginPage() {
   const [regPhone, setRegPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
+  const [regOtp, setRegOtp] = useState('');
+  const [regStep, setRegStep] = useState(1); // 1: Info, 2: OTP, 3: Password
   const regRole = 'CUSTOMER';
 
   // Forgot password states
@@ -50,6 +52,8 @@ export default function LoginPage() {
     setShowForgotView(false);
     setErrorMsg('');
     setSuccessMsg('');
+    setRegStep(1);
+    setRegOtp('');
     setForgotStep(1);
     setForgotEmail('');
     setForgotOtp('');
@@ -90,8 +94,8 @@ export default function LoginPage() {
     }
   };
 
-  // Xử lý Submit Đăng ký
-  const handleRegisterSubmit = async (e) => {
+  // Xử lý gửi OTP Đăng ký
+  const handleRegisterSendOtp = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -109,6 +113,52 @@ export default function LoginPage() {
       setErrorMsg('Vui lòng nhập họ và tên');
       return;
     }
+    if (!regEmail.trim()) {
+      setErrorMsg('Vui lòng nhập Email để nhận mã xác nhận');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await authService.sendRegisterOtp({ email: regEmail.trim() });
+      setRegStep(2);
+      setSuccessMsg('Mã OTP đã được gửi đến email của bạn.');
+    } catch (err) {
+      setErrorMsg(err.message || 'Không thể gửi mã OTP. Email hoặc SĐT có thể đã tồn tại.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Xác nhận OTP đăng ký
+  const handleRegisterVerifyOtp = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!regOtp.trim()) {
+      setErrorMsg('Vui lòng nhập mã OTP');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await authService.verifyRegisterOtp({ email: regEmail.trim(), otp: regOtp.trim() });
+      setRegStep(3);
+      setSuccessMsg('Mã OTP hợp lệ. Vui lòng tạo mật khẩu cho tài khoản.');
+    } catch (err) {
+      setErrorMsg(err.message || 'Mã OTP không hợp lệ hoặc đã hết hạn.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Xử lý Submit Đăng ký
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
     if (!regPassword || regPassword.length < 6) {
       setErrorMsg('Mật khẩu phải có tối thiểu 6 ký tự');
       return;
@@ -116,9 +166,11 @@ export default function LoginPage() {
 
     setIsSubmitting(true);
     try {
+      const phoneClean = regPhone.trim();
       await register({
         phone: phoneClean,
-        email: regEmail.trim() || undefined,
+        email: regEmail.trim(),
+        otp: regOtp.trim(),
         fullName: regFullName.trim(),
         password: regPassword,
         role: regRole,
@@ -141,7 +193,7 @@ export default function LoginPage() {
         }, 1500);
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Đăng ký thất bại. Số điện thoại có thể đã được sử dụng.');
+      setErrorMsg(err.message || 'Đăng ký thất bại. Mã OTP không hợp lệ hoặc đã hết hạn.');
     } finally {
       setIsSubmitting(false);
     }
@@ -170,8 +222,8 @@ export default function LoginPage() {
     }
   };
 
-  // Xử lý Đặt lại mật khẩu
-  const handleForgotResetPassword = async (e) => {
+  // Xác nhận OTP khôi phục mật khẩu
+  const handleForgotVerifyOtp = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -180,6 +232,25 @@ export default function LoginPage() {
       setErrorMsg('Vui lòng nhập mã OTP');
       return;
     }
+
+    setIsSubmitting(true);
+    try {
+      await authService.verifyForgotPasswordOtp({ email: forgotEmail, otp: forgotOtp });
+      setForgotStep(3);
+      setSuccessMsg('Mã OTP hợp lệ. Vui lòng nhập mật khẩu mới.');
+    } catch (err) {
+      setErrorMsg(err.message || 'Mã OTP không hợp lệ hoặc đã hết hạn.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Xử lý Đặt lại mật khẩu
+  const handleForgotResetPassword = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
     if (!forgotNewPassword || forgotNewPassword.length < 6) {
       setErrorMsg('Mật khẩu mới phải có tối thiểu 6 ký tự');
       return;
@@ -198,7 +269,7 @@ export default function LoginPage() {
         switchView(true);
       }, 2000);
     } catch (err) {
-      setErrorMsg(err.message || 'Mã OTP không hợp lệ hoặc đã hết hạn.');
+      setErrorMsg(err.message || 'Lỗi khi đặt lại mật khẩu.');
     } finally {
       setIsSubmitting(false);
     }
@@ -305,8 +376,8 @@ export default function LoginPage() {
                 {isSubmitting ? 'Đang gửi mã...' : 'Nhận mã OTP qua Email'}
               </button>
             </form>
-          ) : (
-            <form className="max-w-[450px] mx-auto" onSubmit={handleForgotResetPassword}>
+          ) : forgotStep === 2 ? (
+            <form className="max-w-[450px] mx-auto" onSubmit={handleForgotVerifyOtp}>
               <div className="mb-4">
                 <label className="block text-[13px] font-bold text-[#333] mb-1">
                   Mã OTP (gửi qua {forgotEmail}) <span className="text-yellow-500">*</span>
@@ -321,7 +392,34 @@ export default function LoginPage() {
                   disabled={isSubmitting}
                   className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
                 />
+                <div className="text-right mt-1 text-[12px]">
+                  <button type="button" onClick={handleForgotSendOtp} disabled={isSubmitting} className="text-[#337ab7] hover:underline cursor-pointer">
+                    Gửi lại mã OTP
+                  </button>
+                </div>
               </div>
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setForgotStep(1)}
+                  className="w-1/3 rounded-[20px] bg-gray-200 py-2.5 font-medium text-gray-700 transition-all hover:bg-gray-300 cursor-pointer"
+                >
+                  Quay lại
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`w-2/3 rounded-[20px] bg-[var(--color-primary)] py-2.5 font-bold text-black transition-all hover:bg-[var(--color-primary-dark)] shadow-sm flex items-center justify-center gap-2 ${
+                    isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                  }`}
+                >
+                  {isSubmitting ? 'Đang xử lý...' : 'Tiếp tục'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className="max-w-[450px] mx-auto" onSubmit={handleForgotResetPassword}>
               <div className="mb-4">
                 <label className="block text-[13px] font-bold text-[#333] mb-1">
                   Mật khẩu mới <span className="text-yellow-500">*</span>
@@ -338,17 +436,9 @@ export default function LoginPage() {
               </div>
               <div className="flex gap-3 mt-4">
                 <button
-                  type="button"
-                  disabled={isSubmitting}
-                  onClick={() => setForgotStep(1)}
-                  className="w-1/3 rounded-[20px] bg-gray-200 py-2.5 font-medium text-gray-700 transition-all hover:bg-gray-300 cursor-pointer"
-                >
-                  Quay lại
-                </button>
-                <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`w-2/3 rounded-[20px] bg-[var(--color-primary)] py-2.5 font-bold text-black transition-all hover:bg-[var(--color-primary-dark)] shadow-sm flex items-center justify-center gap-2 ${
+                  className={`w-full rounded-[20px] bg-[var(--color-primary)] py-2.5 font-bold text-black transition-all hover:bg-[var(--color-primary-dark)] shadow-sm flex items-center justify-center gap-2 ${
                     isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
                   }`}
                 >
@@ -449,7 +539,8 @@ export default function LoginPage() {
           </form>
         ) : (
           /* ĐĂNG KÝ FORM */
-          <form className="max-w-[450px] mx-auto" onSubmit={handleRegisterSubmit}>
+          regStep === 1 ? (
+          <form className="max-w-[450px] mx-auto" onSubmit={handleRegisterSendOtp}>
             <div className="mb-4">
               <label className="block text-[13px] font-bold text-[#333] mb-1">
                 Họ và tên <span className="text-yellow-500">*</span>
@@ -482,27 +573,13 @@ export default function LoginPage() {
 
             <div className="mb-4">
               <label className="block text-[13px] font-bold text-[#333] mb-1">
-                Email (tuỳ chọn)
+                Email <span className="text-yellow-500">*</span>
               </label>
               <input
                 type="email"
                 value={regEmail}
                 onChange={(e) => setRegEmail(e.target.value)}
                 placeholder="VD: user@example.com"
-                disabled={isSubmitting}
-                className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-[13px] font-bold text-[#333] mb-1">
-                Mật khẩu <span className="text-yellow-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={regPassword}
-                onChange={(e) => setRegPassword(e.target.value)}
-                placeholder="Tối thiểu 6 ký tự"
                 required
                 disabled={isSubmitting}
                 className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
@@ -519,13 +596,86 @@ export default function LoginPage() {
               {isSubmitting ? (
                 <>
                   <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
-                  <span>Đang đăng ký...</span>
+                  <span>Đang xử lý...</span>
                 </>
               ) : (
-                'Tạo tài khoản'
+                'Tiếp tục'
               )}
             </button>
           </form>
+          ) : regStep === 2 ? (
+            <form className="max-w-[450px] mx-auto" onSubmit={handleRegisterVerifyOtp}>
+              <div className="mb-4">
+                <label className="block text-[13px] font-bold text-[#333] mb-1">
+                  Mã OTP (gửi qua {regEmail}) <span className="text-yellow-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={regOtp}
+                  onChange={(e) => setRegOtp(e.target.value)}
+                  placeholder="Nhập mã 6 số"
+                  required
+                  maxLength={6}
+                  disabled={isSubmitting}
+                  className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
+                />
+                <div className="text-right mt-1 text-[12px]">
+                  <button type="button" onClick={handleRegisterSendOtp} disabled={isSubmitting} className="text-[#337ab7] hover:underline cursor-pointer">
+                    Gửi lại mã OTP
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setRegStep(1)}
+                  className="w-1/3 rounded-[20px] bg-gray-200 py-2.5 font-medium text-gray-700 transition-all hover:bg-gray-300 cursor-pointer"
+                >
+                  Quay lại
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`w-2/3 rounded-[20px] bg-[var(--color-primary)] py-2.5 font-bold text-black transition-all hover:bg-[var(--color-primary-dark)] shadow-sm flex items-center justify-center gap-2 ${
+                    isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                  }`}
+                >
+                  {isSubmitting ? 'Đang xử lý...' : 'Tiếp tục'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className="max-w-[450px] mx-auto" onSubmit={handleRegisterSubmit}>
+              <div className="mb-4">
+                <label className="block text-[13px] font-bold text-[#333] mb-1">
+                  Tạo mật khẩu cho tài khoản <span className="text-yellow-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  placeholder="Tối thiểu 6 ký tự"
+                  required
+                  disabled={isSubmitting}
+                  className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
+                />
+              </div>
+              
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`w-full rounded-[20px] bg-[var(--color-primary)] py-2.5 font-bold text-black transition-all hover:bg-[var(--color-primary-dark)] shadow-sm flex items-center justify-center gap-2 ${
+                    isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                  }`}
+                >
+                  {isSubmitting ? 'Đang đăng ký...' : 'Tạo tài khoản'}
+                </button>
+              </div>
+            </form>
+          )
         )}
       </div>
     </div>
