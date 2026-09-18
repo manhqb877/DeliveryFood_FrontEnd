@@ -61,6 +61,30 @@ export const authService = {
   },
 
   /**
+   * Gửi OTP khôi phục mật khẩu qua Email
+   * POST /api/v1/auth/forgot-password/send-otp
+   */
+  async sendForgotPasswordOtp({ email }) {
+    const res = await api.post('/auth/forgot-password/send-otp', {
+      email: email?.trim(),
+    });
+    return res.data;
+  },
+
+  /**
+   * Xác nhận OTP và đặt lại mật khẩu mới
+   * POST /api/v1/auth/forgot-password/reset
+   */
+  async resetPassword({ email, otp, newPassword }) {
+    const res = await api.post('/auth/forgot-password/reset', {
+      email: email?.trim(),
+      otp: otp?.trim(),
+      newPassword,
+    });
+    return res.data;
+  },
+
+  /**
    * Lấy thông tin user hiện tại lưu trong LocalStorage
    */
   getCurrentUser() {
