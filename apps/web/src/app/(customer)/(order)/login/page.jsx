@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { authService } from '@/lib/authService';
 import { CheckCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/solid';
 
 export default function LoginPage() {
@@ -24,6 +25,12 @@ export default function LoginPage() {
   const [regPassword, setRegPassword] = useState('');
   const regRole = 'CUSTOMER';
 
+  // Forgot password states
+  const [forgotStep, setForgotStep] = useState(1); // 1 = Enter Email, 2 = Enter OTP & New Password
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+
   // UI status
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -43,6 +50,10 @@ export default function LoginPage() {
     setShowForgotView(false);
     setErrorMsg('');
     setSuccessMsg('');
+    setForgotStep(1);
+    setForgotEmail('');
+    setForgotOtp('');
+    setForgotNewPassword('');
   };
 
   // Xử lý Submit Đăng nhập
@@ -136,6 +147,63 @@ export default function LoginPage() {
     }
   };
 
+  // Xử lý gửi OTP Quên mật khẩu
+  const handleForgotSendOtp = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!forgotEmail.trim()) {
+      setErrorMsg('Vui lòng nhập Email để nhận mã OTP');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await authService.sendForgotPasswordOtp({ email: forgotEmail });
+      setForgotStep(2);
+      setSuccessMsg('Mã OTP đã được gửi đến email của bạn. Vui lòng kiểm tra hộp thư.');
+    } catch (err) {
+      setErrorMsg(err.message || 'Không thể gửi mã OTP. Vui lòng kiểm tra lại Email.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Xử lý Đặt lại mật khẩu
+  const handleForgotResetPassword = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!forgotOtp.trim()) {
+      setErrorMsg('Vui lòng nhập mã OTP');
+      return;
+    }
+    if (!forgotNewPassword || forgotNewPassword.length < 6) {
+      setErrorMsg('Mật khẩu mới phải có tối thiểu 6 ký tự');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await authService.resetPassword({
+        email: forgotEmail,
+        otp: forgotOtp,
+        newPassword: forgotNewPassword
+      });
+      setSuccessMsg('Đặt lại mật khẩu thành công! Vui lòng đăng nhập.');
+      setTimeout(() => {
+        setLoginPhone(forgotEmail);
+        switchView(true);
+      }, 2000);
+    } catch (err) {
+      setErrorMsg(err.message || 'Mã OTP không hợp lệ hoặc đã hết hạn.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col w-full bg-white min-h-screen">
       {/* Breadcrumb */}
@@ -211,23 +279,84 @@ export default function LoginPage() {
 
         {showForgotView ? (
           /* Quên mật khẩu form */
-          <form className="max-w-[450px] mx-auto" onSubmit={(e) => { e.preventDefault(); setErrorMsg('Tính năng khôi phục mật khẩu đang được nâng cấp'); }}>
-            <div className="mb-4">
-              <label className="block text-[13px] font-bold text-[#333] mb-1">Số điện thoại hoặc Email <span className="text-yellow-500">*</span></label>
-              <input
-                type="text"
-                placeholder="Nhập số điện thoại đã đăng ký"
-                required
-                className="w-full border border-gray-200 rounded-[3px] px-4 py-2 text-[13px] outline-none focus:border-[#a5a5a5]"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full rounded-[20px] bg-[#d7ccc8] py-2.5 font-medium text-[#795548] transition-all hover:opacity-90 mt-4 cursor-pointer"
-            >
-              Khôi phục mật khẩu
-            </button>
-          </form>
+          forgotStep === 1 ? (
+            <form className="max-w-[450px] mx-auto" onSubmit={handleForgotSendOtp}>
+              <div className="mb-4">
+                <label className="block text-[13px] font-bold text-[#333] mb-1">
+                  Email đã đăng ký <span className="text-yellow-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="VD: user@example.com"
+                  required
+                  disabled={isSubmitting}
+                  className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className={`w-full rounded-[20px] bg-[#d7ccc8] py-2.5 font-medium text-[#795548] transition-all hover:bg-[#c2b5b0] mt-4 flex items-center justify-center gap-2 ${
+                  isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                }`}
+              >
+                {isSubmitting ? 'Đang gửi mã...' : 'Nhận mã OTP qua Email'}
+              </button>
+            </form>
+          ) : (
+            <form className="max-w-[450px] mx-auto" onSubmit={handleForgotResetPassword}>
+              <div className="mb-4">
+                <label className="block text-[13px] font-bold text-[#333] mb-1">
+                  Mã OTP (gửi qua {forgotEmail}) <span className="text-yellow-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={forgotOtp}
+                  onChange={(e) => setForgotOtp(e.target.value)}
+                  placeholder="Nhập mã 6 số"
+                  required
+                  maxLength={6}
+                  disabled={isSubmitting}
+                  className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-[13px] font-bold text-[#333] mb-1">
+                  Mật khẩu mới <span className="text-yellow-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={forgotNewPassword}
+                  onChange={(e) => setForgotNewPassword(e.target.value)}
+                  placeholder="Tối thiểu 6 ký tự"
+                  required
+                  disabled={isSubmitting}
+                  className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
+                />
+              </div>
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setForgotStep(1)}
+                  className="w-1/3 rounded-[20px] bg-gray-200 py-2.5 font-medium text-gray-700 transition-all hover:bg-gray-300 cursor-pointer"
+                >
+                  Quay lại
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`w-2/3 rounded-[20px] bg-[var(--color-primary)] py-2.5 font-bold text-black transition-all hover:bg-[var(--color-primary-dark)] shadow-sm flex items-center justify-center gap-2 ${
+                    isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                  }`}
+                >
+                  {isSubmitting ? 'Đang xử lý...' : 'Xác nhận đổi mật khẩu'}
+                </button>
+              </div>
+            </form>
+          )
         ) : isLoginView ? (
           /* ĐĂNG NHẬP FORM */
           <form className="max-w-[450px] mx-auto" onSubmit={handleLoginSubmit}>
