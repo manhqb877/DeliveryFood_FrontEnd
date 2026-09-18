@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #ffb800;
+  --color-primary-dark: #e5a600;
+  --color-hc-cream: #f4f0eb;
+  --color-hc-cream-light: #faf7f4;
+  --color-hc-dark: #1a1a1a;
+  --color-hc-brown: #4a3728;
+  --color-hc-gold: #c89a58;
+}
+
+body {
+  background: #ffffff;
+  color: #1a1a1a;
+  font-family: 'Quicksand', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Quicksand', 'Plus Jakarta Sans', sans-serif;
+  letter-spacing: 0.01em;
+  font-weight: 700;
+}
+
+/* Custom scrollbar - HC red */
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f4f0eb;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-dark);
+}
+
+/* Carousel Utilities */
+.tch-hscroll-track {
+  --carousel-columns: 3;
+  --carousel-gap: 16px;
+  display: flex;
+  justify-content: center;
+  gap: var(--carousel-gap);
+  width: 100%;
+}
+
+.tch-hscroll-item {
+  flex: 0 0 calc((100% - (var(--carousel-gap) * (var(--carousel-columns) - 1))) / var(--carousel-columns));
+  min-width: 0;
+}
+
+/* Card utilities */
+.tch-carousel-card {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #e8e2da;
+  border-radius: 16px;
+  padding: 14px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.tch-carousel-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 28px rgba(255, 184, 0, 0.15);
+}
+
+.hc-fade-in {
+  animation: hc-fade-in 0.6s ease-out;
+}
+
+@keyframes hc-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
