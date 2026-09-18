@@ -241,7 +241,7 @@ export default function ProductDetailPage() {
                     ☕ Phản hồi của Highlands Coffee
                   </p>
                   <p className="text-xs text-gray-700 leading-relaxed">
-                    Chào bạn Hoàng Minh, cảm ơn bạn đã ủng hộ và góp ý. Lần tới bạn có thể ghi chú "Ít đá" để cửa hàng chuẩn bị đúng gu của bạn nhé!
+                    Chào bạn Hoàng Minh, cảm ơn bạn đã ủng hộ và góp ý. Lần tới bạn có thể ghi chú &quot;Ít đá&quot; để cửa hàng chuẩn bị đúng gu của bạn nhé!
                   </p>
                 </div>
               </div>
