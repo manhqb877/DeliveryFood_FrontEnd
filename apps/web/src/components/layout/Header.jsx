@@ -26,6 +26,11 @@ export default function Header() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const { user, isAuthenticated, logout } = useAuth();
 
   useEffect(() => {
@@ -45,7 +50,6 @@ export default function Header() {
   };
 
   const leftNavItems = [
-    { id: 'menu-intro', label: 'THỰC ĐƠN', icon: HomeIcon, href: '/menu-intro' },
     { id: 'about', label: 'VỀ BEFOOD', icon: InformationCircleIcon, href: '/about' },
     { id: 'careers', label: 'NGHỀ NGHIỆP', icon: BriefcaseIcon, href: '/careers' },
     { id: 'contact', label: 'HỖ TRỢ', icon: ChatBubbleLeftEllipsisIcon, href: '/contact' },
@@ -140,7 +144,9 @@ export default function Header() {
             </div>
 
             {/* User Account or Login button */}
-            {isAuthenticated && user ? (
+            {!mounted ? (
+              <div className="w-[100px] h-8 bg-gray-100 animate-pulse rounded-full" />
+            ) : isAuthenticated && user ? (
               <div className="relative mx-1" ref={userMenuRef}>
                 <button
                   type="button"
@@ -226,7 +232,9 @@ export default function Header() {
 
           {/* MOBILE TOGGLE */}
           <div className="flex items-center gap-2 lg:hidden ml-2">
-            {isAuthenticated && user ? (
+            {!mounted ? (
+              <div className="w-8 h-8 rounded-full bg-gray-100 animate-pulse" />
+            ) : isAuthenticated && user ? (
               <div className="w-8 h-8 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-black font-black text-[12px] uppercase shadow-sm">
                 {(user.fullName || user.phone || '?')[0].toUpperCase()}
               </div>
