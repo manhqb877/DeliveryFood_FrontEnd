@@ -82,14 +82,10 @@ export default function LoginPage() {
         password: loginPassword,
       });
 
-      setSuccessMsg(`Đăng nhập thành công! Chào mừng ${data.user?.fullName || 'bạn'}`);
-      setTimeout(() => {
-        const redirectUrl = searchParams.get('redirect') || '/order';
-        router.push(redirectUrl);
-      }, 800);
+      const redirectUrl = searchParams.get('redirect') || '/order';
+      router.push(redirectUrl);
     } catch (err) {
       setErrorMsg(err.message || 'Số điện thoại hoặc mật khẩu không chính xác');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -452,13 +448,13 @@ export default function LoginPage() {
           <form className="max-w-[450px] mx-auto" onSubmit={handleLoginSubmit}>
             <div className="mb-4">
               <label className="block text-[13px] font-bold text-[#333] mb-1">
-                Số điện thoại <span className="text-yellow-500">*</span>
+                SĐT hoặc Email <span className="text-yellow-500">*</span>
               </label>
               <input
                 type="text"
                 value={loginPhone}
                 onChange={(e) => setLoginPhone(e.target.value)}
-                placeholder="VD: 0912345678"
+                placeholder="Nhập SĐT hoặc Email"
                 required
                 disabled={isSubmitting}
                 className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"

@@ -121,6 +121,57 @@ export const authService = {
   },
 
   /**
+   * Đổi mật khẩu
+   * POST /api/v1/auth/change-password
+   */
+  async changePassword({ oldPassword, newPassword }) {
+    const res = await api.post('/auth/change-password', {
+      oldPassword,
+      newPassword,
+    });
+    return res.data;
+  },
+
+  /**
+   * Lấy danh sách địa chỉ
+   * GET /api/v1/auth/addresses
+   */
+  async getAddresses() {
+    const res = await api.get('/auth/addresses');
+    return res.data;
+  },
+
+  /**
+   * Thêm địa chỉ mới
+   * POST /api/v1/auth/addresses
+   */
+  async addAddress({ addressLine, isDefault }) {
+    const res = await api.post('/auth/addresses', {
+      addressLine: addressLine?.trim(),
+      isDefault,
+    });
+    return res.data;
+  },
+
+  /**
+   * Xóa địa chỉ
+   * DELETE /api/v1/auth/addresses/:id
+   */
+  async deleteAddress(id) {
+    const res = await api.delete(`/auth/addresses/${id}`);
+    return res.data;
+  },
+
+  /**
+   * Đặt địa chỉ làm mặc định
+   * PUT /api/v1/auth/addresses/:id/default
+   */
+  async setDefaultAddress(id) {
+    const res = await api.put(`/auth/addresses/${id}/default`);
+    return res.data;
+  },
+
+  /**
    * Lấy thông tin user hiện tại lưu trong LocalStorage
    */
   getCurrentUser() {
