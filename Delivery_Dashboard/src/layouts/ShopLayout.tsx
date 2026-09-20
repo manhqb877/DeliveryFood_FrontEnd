@@ -34,9 +34,8 @@ export function ShopLayout() {
   const [shop, setShop] = useState<ShopProfile | null>(null);
 
   useEffect(() => {
-    dbService.getShops().then((shops) => {
-      const myShop = shops.find((s) => s.owner_id === currentUser?.id);
-      setShop(myShop || shops[0]);
+    dbService.getMyShop().then((myShop) => {
+      if (myShop) setShop(myShop);
     });
   }, [currentUser?.id]);
 
@@ -145,10 +144,10 @@ export function ShopLayout() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 overflow-hidden">
               <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                {currentUser.full_name.charAt(0)}
+                {currentUser?.full_name ? currentUser.full_name.charAt(0) : 'S'}
               </div>
               <div className="truncate">
-                <p className="text-xs font-semibold text-white truncate">{currentUser.full_name}</p>
+                <p className="text-xs font-semibold text-white truncate">{currentUser?.full_name || 'Chủ gian hàng'}</p>
                 <p className="text-[10px] text-emerald-400 font-medium">CHỦ GIAN HÀNG</p>
               </div>
             </div>

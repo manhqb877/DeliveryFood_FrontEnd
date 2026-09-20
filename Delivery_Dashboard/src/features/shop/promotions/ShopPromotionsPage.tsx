@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '@/api/client';
-import { Promotion, PromotionRedemption } from '@/api/mockData';
+import { Promotion, PromotionRedemption, ShopProfile } from '@/api/mockData';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
@@ -26,6 +26,7 @@ import {
 
 export function ShopPromotionsPage() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [currentShop, setCurrentShop] = useState<ShopProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
@@ -69,13 +70,49 @@ export function ShopPromotionsPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const list = await dbService.getPromotions('SHOP', 1);
-    setPromotions(list.filter((p) => !p.shop_id || p.shop_id === 1));
+    const myShop = await dbService.getMyShop();
+    setCurrentShop(myShop);
+    const currentShopId = myShop?.id;
+    if (currentShopId) {
+      const list = await dbService.getPromotions('SHOP', currentShopId);
+      setPromotions(list.filter((p) => p.shop_id === currentShopId));
+    } else {
+      const list = await dbService.getPromotions('SHOP');
+      setPromotions(list);
+    }
     setLoading(false);
   };
 
   useEffect(() => {
     loadData();
+
+    // Listen to real-time promotion approval/rejection/status events
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('hyperlocal_promotions');
+      bc.onmessage = (event) => {
+        if (
+          event.data?.type === 'PROMOTION_APPROVED' ||
+          event.data?.type === 'PROMOTION_REJECTED' ||
+          event.data?.type === 'PROMOTION_TOGGLED' ||
+          event.data?.type === 'PROMOTION_UPDATED'
+        ) {
+          loadData();
+        }
+      };
+    } catch (e) {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'hyperlocal_promo_event') {
+        loadData();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
   const handleOpenCreateModal = () => {
@@ -131,12 +168,15 @@ export function ShopPromotionsPage() {
       return;
     }
 
+    const targetShopId = currentShop?.id || 1;
+    const targetShopName = currentShop?.shop_name || 'Gian hàng của tôi';
+
     if (editingPromo) {
       await dbService.savePromotion({
         ...newPromo,
         id: editingPromo.id,
-        shop_id: 1,
-        shop_name: 'Cơm Nhà Chị Lan',
+        shop_id: targetShopId,
+        shop_name: targetShopName,
       });
       toast.success(
         `Đã cập nhật thành công các thông số mã khuyến mãi "${newPromo.code}"!`,
@@ -146,8 +186,8 @@ export function ShopPromotionsPage() {
       await dbService.savePromotion({
         ...newPromo,
         scope: 'SHOP',
-        shop_id: 1,
-        shop_name: 'Cơm Nhà Chị Lan',
+        shop_id: targetShopId,
+        shop_name: targetShopName,
         approval_status: 'PENDING',
         is_active: true,
         used_count: 0,
@@ -159,7 +199,7 @@ export function ShopPromotionsPage() {
     }
 
     setIsModalOpen(false);
-    loadData();
+    await loadData();
   };
 
   const handleTogglePromo = async (promo: Promotion) => {
@@ -186,7 +226,7 @@ export function ShopPromotionsPage() {
     try {
       const result = await dbService.validatePromotion({
         code: testCode.trim(),
-        shopId: 1,
+        shopId: currentShop?.id || 1,
         userId: Number(testUserId),
         orderValue: Number(testOrderValue),
       });

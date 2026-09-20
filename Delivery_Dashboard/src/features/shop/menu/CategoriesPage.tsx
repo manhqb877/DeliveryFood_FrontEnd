@@ -25,7 +25,9 @@ export function CategoriesPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const data = await dbService.getCategories(1); // current shop 1
+    const myShop = await dbService.getMyShop();
+    const currentShopId = myShop?.id || 1;
+    const data = await dbService.getCategories(currentShopId);
     setCategories(data);
     setLoading(false);
   };
@@ -39,7 +41,9 @@ export function CategoriesPage() {
       alert('Vui lòng nhập tên danh mục!');
       return;
     }
-    await dbService.saveCategory({ ...editingCategory, shop_id: 1 });
+    const myShop = await dbService.getMyShop();
+    const currentShopId = myShop?.id || 1;
+    await dbService.saveCategory({ ...editingCategory, shop_id: currentShopId });
     alert('Đã lưu danh mục thành công!');
     setIsModalOpen(false);
     loadData();

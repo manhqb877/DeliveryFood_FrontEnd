@@ -6,7 +6,7 @@ import { Modal } from '@/components/ui/Modal';
 import {
   Check, X, Clock, ShoppingBag, MapPin, User, Phone,
   AlertCircle, RefreshCw, ChefHat, Bell, Flame, PackageCheck,
-  CreditCard, Wallet, Truck, MessageSquare, History
+  CreditCard, Wallet, Truck, MessageSquare, History, CheckCircle2
 } from 'lucide-react';
 
 // --- Mini Status Stepper ---
@@ -97,12 +97,13 @@ interface OrderCardProps {
   order: Order;
   onConfirm: () => void;
   onReady: () => void;
+  onHandover?: () => void;
   onReject: () => void;
   onViewDetail: () => void;
   entering?: boolean;
 }
 
-function OrderCard({ order, onConfirm, onReady, onReject, onViewDetail, entering }: OrderCardProps) {
+function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDetail, entering }: OrderCardProps) {
   const isNew = order.order_status === 'PLACED';
   const isPreparing = ['CONFIRMED', 'PREPARING'].includes(order.order_status);
   const isReady = order.order_status === 'READY_FOR_PICKUP';
@@ -248,8 +249,18 @@ function OrderCard({ order, onConfirm, onReady, onReject, onViewDetail, entering
           </button>
         )}
         {isReady && (
-          <div className="py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-center text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5">
-            <Truck className="w-3.5 h-3.5 animate-bounce" /> Chờ Shipper Đến Nhận Hàng...
+          <div className="flex flex-col gap-2">
+            <div className="py-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-center text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5">
+              <Truck className="w-3.5 h-3.5 animate-bounce text-emerald-600" /> Món Đã Sẵn Sàng — Chờ Shipper Đến Lấy
+            </div>
+            {onHandover && (
+              <button
+                onClick={onHandover}
+                className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Check className="w-3.5 h-3.5" /> Bàn Giao Cho Shipper (Đang Giao)
+              </button>
+            )}
           </div>
         )}
         {isHistory && (
@@ -278,9 +289,17 @@ export function ShopOrdersPage() {
   const [lastPollTime, setLastPollTime] = useState<Date>(new Date());
   const [transitioning, setTransitioning] = useState<number | null>(null);
   const prevOrderIds = useRef<Set<number>>(new Set());
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   const loadOrders = useCallback(async () => {
-    const list = await dbService.getOrders({ shop_id: 1 });
+    const myShop = await dbService.getMyShop();
+    const currentShopId = myShop?.id || 1;
+    const list = await dbService.getOrders({ shop_id: currentShopId });
     setOrders(list);
     setLastPollTime(new Date());
     setLoading(false);
@@ -288,16 +307,55 @@ export function ShopOrdersPage() {
 
   useEffect(() => {
     loadOrders();
-    const interval = setInterval(loadOrders, 5000);
-    return () => clearInterval(interval);
+    const interval = setInterval(loadOrders, 4000);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('hyperlocal_orders');
+      channel.onmessage = () => {
+        loadOrders();
+      };
+    } catch (e) {}
+
+    return () => {
+      clearInterval(interval);
+      channel?.close();
+    };
   }, [loadOrders]);
 
-  const handleUpdateStatus = async (orderId: number, nextStatus: Order['order_status'], reason?: string) => {
+  const handleUpdateStatus = async (
+    orderId: number,
+    nextStatus: Order['order_status'],
+    reason?: string,
+    targetTab?: 'NEW' | 'PREPARING' | 'READY' | 'HISTORY'
+  ) => {
     setTransitioning(orderId);
-    await new Promise(r => setTimeout(r, 400)); // brief visual delay
-    await dbService.updateOrderStatus(orderId, nextStatus, 'SHOP_MANAGER', reason);
-    await loadOrders();
-    setTransitioning(null);
+    await new Promise(r => setTimeout(r, 300)); // brief visual transition
+    try {
+      await dbService.updateOrderStatus(orderId, nextStatus, 'SHOP_MANAGER', reason);
+      
+      // Auto-switch to next progress stage as user requested ("xác nhận xong chuyển tiến trình")
+      if (targetTab) {
+        setActiveTab(targetTab);
+      } else if (nextStatus === 'CONFIRMED' || nextStatus === 'PREPARING') {
+        setActiveTab('PREPARING');
+        showToast('✓ Đã xác nhận đơn hàng thành công! Đơn đã chuyển sang tiến trình "Đang Nấu".');
+      } else if (nextStatus === 'READY_FOR_PICKUP') {
+        setActiveTab('READY');
+        showToast('✓ Đã báo món sẵn sàng! Đơn đã chuyển sang tiến trình "Chờ Lấy".');
+      } else if (['DELIVERING', 'DELIVERED', 'COMPLETED'].includes(nextStatus)) {
+        setActiveTab('HISTORY');
+        showToast('✓ Đã bàn giao cho Shipper! Đơn đã chuyển sang tiến trình "Lịch Sử".');
+      } else if (nextStatus === 'CANCELLED') {
+        setActiveTab('HISTORY');
+        showToast('Đã từ chối đơn hàng.');
+      }
+    } catch (e) {
+      console.error('Error updating status:', e);
+    } finally {
+      await loadOrders();
+      setTransitioning(null);
+    }
   };
 
   const handleConfirmCancel = async () => {
@@ -306,7 +364,7 @@ export function ShopOrdersPage() {
       alert('Vui lòng nhập lý do từ chối đơn hàng!');
       return;
     }
-    await handleUpdateStatus(cancelModalOrder.id, 'CANCELLED', cancelReasonInput);
+    await handleUpdateStatus(cancelModalOrder.id, 'CANCELLED', cancelReasonInput, 'HISTORY');
     setCancelModalOrder(null);
     setCancelReasonInput('');
   };
@@ -350,6 +408,15 @@ export function ShopOrdersPage() {
           animation: scaleFadeOut 0.35s ease-in both;
         }
       `}</style>
+
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-xl border border-emerald-500 font-semibold text-xs flex items-center gap-2.5 animate-bounce">
+          <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+          <span>{toastMessage}</span>
+          <button onClick={() => setToastMessage(null)} className="ml-2 text-white/80 hover:text-white">✕</button>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -423,6 +490,7 @@ export function ShopOrdersPage() {
                 entering={!prevOrderIds.current.has(order.id)}
                 onConfirm={() => handleUpdateStatus(order.id, 'CONFIRMED')}
                 onReady={() => handleUpdateStatus(order.id, 'READY_FOR_PICKUP')}
+                onHandover={() => handleUpdateStatus(order.id, 'DELIVERING')}
                 onReject={() => setCancelModalOrder(order)}
                 onViewDetail={() => setDetailOrder(order)}
               />
@@ -585,7 +653,54 @@ export function ShopOrdersPage() {
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex justify-between items-center pt-2">
+              <div className="flex gap-2">
+                {detailOrder.order_status === 'PLACED' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        const ord = detailOrder;
+                        setDetailOrder(null);
+                        setCancelModalOrder(ord);
+                      }}
+                      className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-bold border border-rose-200 cursor-pointer flex items-center gap-1"
+                    >
+                      <X className="w-3 h-3" /> Từ Chối
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await handleUpdateStatus(detailOrder.id, 'CONFIRMED');
+                        setDetailOrder(null);
+                      }}
+                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1"
+                    >
+                      <Check className="w-3 h-3" /> Xác Nhận Đơn
+                    </button>
+                  </>
+                )}
+                {['CONFIRMED', 'PREPARING'].includes(detailOrder.order_status) && (
+                  <button
+                    onClick={async () => {
+                      await handleUpdateStatus(detailOrder.id, 'READY_FOR_PICKUP');
+                      setDetailOrder(null);
+                    }}
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <PackageCheck className="w-3.5 h-3.5" /> Báo Món Đã Sẵn Sàng
+                  </button>
+                )}
+                {detailOrder.order_status === 'READY_FOR_PICKUP' && (
+                  <button
+                    onClick={async () => {
+                      await handleUpdateStatus(detailOrder.id, 'DELIVERING');
+                      setDetailOrder(null);
+                    }}
+                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Truck className="w-3.5 h-3.5" /> Bàn Giao Cho Shipper
+                  </button>
+                )}
+              </div>
               <button onClick={() => setDetailOrder(null)} className="px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 cursor-pointer text-xs">
                 Đóng
               </button>

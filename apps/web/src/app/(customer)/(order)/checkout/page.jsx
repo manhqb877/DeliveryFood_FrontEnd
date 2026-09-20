@@ -61,10 +61,15 @@ export default function CheckoutPage() {
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [loadingAddr, setLoadingAddr] = useState(false);
 
-  // Promotions & Vouchers
-  const [promotions, setPromotions] = useState([]);
+  // Promotions & Vouchers (Separated into Shop Vouchers & System/Platform Vouchers)
+  const [shopPromotions, setShopPromotions] = useState([]);
+  const [platformPromotions, setPlatformPromotions] = useState([]);
   const [loadingPromos, setLoadingPromos] = useState(false);
-  const [selectedPromo, setSelectedPromo] = useState(null);
+  
+  const [selectedShopPromo, setSelectedShopPromo] = useState(null);
+  const [selectedPlatformPromo, setSelectedPlatformPromo] = useState(null);
+  const [promoTab, setPromoTab] = useState('ALL'); // 'ALL' | 'SHOP' | 'PLATFORM'
+  
   const [customPromoCode, setCustomPromoCode] = useState('');
   const [promoMessage, setPromoMessage] = useState(null); // { type: 'success' | 'error', text: '' }
 
@@ -153,23 +158,49 @@ export default function CheckoutPage() {
     }
   };
 
-  // Load promotions for this shop / platform
+  // Load promotions: Both Shop-specific vouchers AND Platform/System vouchers
   useEffect(() => {
     if (!cartToOrder.shopId) return;
     setLoadingPromos(true);
-    fetch(`${API}/promotions/shop/${cartToOrder.shopId}`)
-      .then(res => res.ok ? res.json() : [])
-      .then(data => {
-        if (Array.isArray(data)) {
-          setPromotions(data.filter(p => p.isActive !== false && p.approvalStatus !== 'REJECTED'));
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoadingPromos(false));
-  }, [cartToOrder.shopId]);
 
-  // Calculate discount amount based on promotion rules
-  const calculateDiscount = (promo, currentSubtotal) => {
+    Promise.all([
+      // 1. Fetch Shop Promos
+      fetch(`${API}/promotions/shop/${cartToOrder.shopId}/active`)
+        .then(res => res.ok ? res.json() : [])
+        .catch(() => fetch(`${API}/promotions/shop/${cartToOrder.shopId}`).then(r => r.ok ? r.json() : []))
+        .catch(() => []),
+      // 2. Fetch Platform / System Promos
+      fetch(`${API}/promotions/platform`)
+        .then(res => res.ok ? res.json() : [])
+        .catch(() => fetch(`${API}/promotions/admin?scope=PLATFORM`).then(r => r.ok ? r.json() : []))
+        .catch(() => [])
+    ])
+    .then(([shopData, platformData]) => {
+      const activeShop = Array.isArray(shopData) ? shopData.filter(p => p.isActive !== false && p.approvalStatus !== 'REJECTED') : [];
+      const activePlatform = Array.isArray(platformData) ? platformData.filter(p => p.isActive !== false && p.approvalStatus !== 'REJECTED') : [];
+      
+      setShopPromotions(activeShop);
+      setPlatformPromotions(activePlatform);
+
+      // Check if user previously claimed a shop voucher via the Welcome modal
+      try {
+        const saved = JSON.parse(localStorage.getItem('claimed_shop_vouchers') || '{}');
+        const claimedCode = saved[cartToOrder.shopId];
+        if (claimedCode) {
+          const match = activeShop.find(p => p.code === claimedCode);
+          if (match && subtotal >= Number(match.minOrderValue || 0)) {
+            setSelectedShopPromo(match);
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })
+    .finally(() => setLoadingPromos(false));
+  }, [cartToOrder.shopId, subtotal]);
+
+  // Calculate discount amount for a given promotion
+  const calculateSingleDiscount = (promo, currentSubtotal) => {
     if (!promo || currentSubtotal <= 0) return 0;
 
     // Minimum order check
@@ -192,87 +223,123 @@ export default function CheckoutPage() {
     return 0;
   };
 
-  const discountAmount = calculateDiscount(selectedPromo, subtotal);
-  const totalAmount = Math.max(0, subtotal + deliveryFee - discountAmount);
+  const shopDiscount = calculateSingleDiscount(selectedShopPromo, subtotal);
+  const platformDiscount = calculateSingleDiscount(selectedPlatformPromo, subtotal);
+  const totalDiscount = Math.min(subtotal, shopDiscount + platformDiscount);
+  const totalAmount = Math.max(0, subtotal + deliveryFee - totalDiscount);
 
-  // Apply a voucher from the list or input
-  const handleApplyVoucher = (promo) => {
+  // Toggle or Apply Shop Voucher
+  const handleToggleShopVoucher = (promo) => {
     setPromoMessage(null);
-    if (!promo) {
-      setSelectedPromo(null);
+    if (!promo || selectedShopPromo?.code === promo.code) {
+      setSelectedShopPromo(null);
       return;
     }
 
     if (promo.minOrderValue && subtotal < Number(promo.minOrderValue)) {
       setPromoMessage({
         type: 'error',
-        text: `Mã "${promo.code}" yêu cầu đơn tối thiểu từ ${Number(promo.minOrderValue).toLocaleString('vi-VN')}đ (Đơn hiện tại: ${subtotal.toLocaleString('vi-VN')}đ).`
+        text: `Mã quán "${promo.code}" yêu cầu đơn tối thiểu từ ${Number(promo.minOrderValue).toLocaleString('vi-VN')}đ (Đơn hiện tại: ${subtotal.toLocaleString('vi-VN')}đ).`
       });
       return;
     }
 
-    if (promo.totalLimit && promo.usedCount && promo.usedCount >= promo.totalLimit) {
-      setPromoMessage({
-        type: 'error',
-        text: `Mã "${promo.code}" đã hết số lượt sử dụng trong đợt phát hành này.`
-      });
-      return;
-    }
-
-    setSelectedPromo(promo);
-    const disc = calculateDiscount(promo, subtotal);
+    setSelectedShopPromo(promo);
+    const disc = calculateSingleDiscount(promo, subtotal);
     setPromoMessage({
       type: 'success',
-      text: `Áp dụng thành công mã "${promo.code}": Giảm ${disc.toLocaleString('vi-VN')}đ!`
+      text: `Áp dụng mã Quán "${promo.code}": Giảm ${disc.toLocaleString('vi-VN')}đ!`
     });
   };
 
+  // Toggle or Apply Platform Voucher
+  const handleTogglePlatformVoucher = (promo) => {
+    setPromoMessage(null);
+    if (!promo || selectedPlatformPromo?.code === promo.code) {
+      setSelectedPlatformPromo(null);
+      return;
+    }
+
+    if (promo.minOrderValue && subtotal < Number(promo.minOrderValue)) {
+      setPromoMessage({
+        type: 'error',
+        text: `Mã hệ thống "${promo.code}" yêu cầu đơn tối thiểu từ ${Number(promo.minOrderValue).toLocaleString('vi-VN')}đ (Đơn hiện tại: ${subtotal.toLocaleString('vi-VN')}đ).`
+      });
+      return;
+    }
+
+    setSelectedPlatformPromo(promo);
+    const disc = calculateSingleDiscount(promo, subtotal);
+    setPromoMessage({
+      type: 'success',
+      text: `Áp dụng mã Toàn Sàn "${promo.code}": Giảm ${disc.toLocaleString('vi-VN')}đ!`
+    });
+  };
+
+  // Custom code input validation
   const handleApplyCustomCode = () => {
     const code = customPromoCode.trim().toUpperCase();
     if (!code) return;
-    const match = promotions.find(p => p.code.toUpperCase() === code);
-    if (match) {
-      handleApplyVoucher(match);
-    } else {
-      // Validate via backend endpoint
-      fetch(`${API}/promotions/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+
+    // Check if it matches a shop promo
+    const shopMatch = shopPromotions.find(p => p.code.toUpperCase() === code);
+    if (shopMatch) {
+      handleToggleShopVoucher(shopMatch);
+      return;
+    }
+
+    // Check if it matches a platform promo
+    const platformMatch = platformPromotions.find(p => p.code.toUpperCase() === code);
+    if (platformMatch) {
+      handleTogglePlatformVoucher(platformMatch);
+      return;
+    }
+
+    // Validate via backend endpoint
+    fetch(`${API}/promotions/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        orderAmount: subtotal,
+        userId: user?.id || null,
+        shopId: cartToOrder.shopId
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.valid) {
+        const customPromoObj = {
           code,
-          orderAmount: subtotal,
-          userId: user?.id || null,
-          shopId: cartToOrder.shopId
-        })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.valid) {
-          setSelectedPromo({
-            code,
-            promoType: data.promoType,
-            discountValue: data.discountValue,
-            maxDiscountAmount: data.maxDiscountAmount,
-            minOrderValue: data.minOrderValue,
-          });
-          setPromoMessage({
-            type: 'success',
-            text: `Áp dụng mã "${code}" thành công: Giảm ${Number(data.discountAmount).toLocaleString('vi-VN')}đ!`
-          });
+          promoType: data.promoType,
+          discountValue: data.discountValue,
+          maxDiscountAmount: data.maxDiscountAmount,
+          minOrderValue: data.minOrderValue,
+        };
+
+        if (data.scope === 'SHOP') {
+          setSelectedShopPromo(customPromoObj);
         } else {
-          setPromoMessage({
-            type: 'error',
-            text: data.message || `Mã "${code}" không hợp lệ hoặc chưa thỏa điều kiện.`
-          });
+          setSelectedPlatformPromo(customPromoObj);
         }
-      })
-      .catch(() => {
+
+        setPromoMessage({
+          type: 'success',
+          text: `Áp dụng mã "${code}" thành công: Giảm ${Number(data.discountAmount).toLocaleString('vi-VN')}đ!`
+        });
+      } else {
         setPromoMessage({
           type: 'error',
-          text: `Mã "${code}" không hợp lệ hoặc không tồn tại.`
+          text: data.message || `Mã "${code}" không hợp lệ hoặc chưa thỏa điều kiện.`
         });
+      }
+    })
+    .catch(() => {
+      setPromoMessage({
+        type: 'error',
+        text: `Mã "${code}" không hợp lệ hoặc không tồn tại.`
       });
-    }
+    });
   };
 
   const handlePlaceOrder = async () => {
@@ -326,15 +393,18 @@ export default function CheckoutPage() {
         note: note || ''
       };
 
+      const appliedCodes = [selectedShopPromo?.code, selectedPlatformPromo?.code].filter(Boolean).join(', ') || null;
+      const appliedPromoId = selectedShopPromo?.id || selectedPlatformPromo?.id || null;
+
       const payload = {
         cartId: cartToOrder.id,
         deliveryAddress: deliveryAddressMap,
         paymentMethod: 'COD', // Locked to COD
         orderNote: note || '',
         idempotencyKey: idempotencyKey,
-        promotionCode: selectedPromo?.code || null,
-        promotionId: selectedPromo?.id || null,
-        discountAmount: discountAmount || 0
+        promotionCode: appliedCodes,
+        promotionId: appliedPromoId,
+        discountAmount: totalDiscount || 0
       };
 
       const res = await fetch(`${API}/orders`, {
@@ -422,8 +492,11 @@ export default function CheckoutPage() {
               <p>Người nhận: <strong className="text-slate-900">{successOrder.customerName || fullName}</strong> ({successOrder.customerPhone || phone})</p>
               <p>Địa chỉ giao: <strong className="text-slate-900">{typeof successOrder.deliveryAddress === 'string' ? successOrder.deliveryAddress : (successOrder.deliveryAddress?.fullAddress || '')}</strong></p>
               <p>Hình thức: <strong className="text-emerald-700">Thanh toán khi nhận hàng (COD)</strong></p>
-              {selectedPromo && (
-                <p>Khuyến mãi áp dụng: <strong className="text-purple-700">{selectedPromo.code}</strong> (Giảm {discountAmount.toLocaleString('vi-VN')}đ)</p>
+              {selectedShopPromo && (
+                <p>Khuyến mãi Quán: <strong className="text-orange-600 font-mono">{selectedShopPromo.code}</strong> (Giảm {shopDiscount.toLocaleString('vi-VN')}đ)</p>
+              )}
+              {selectedPlatformPromo && (
+                <p>Khuyến mãi Sàn / Hệ Thống: <strong className="text-purple-700 font-mono">{selectedPlatformPromo.code}</strong> (Giảm {platformDiscount.toLocaleString('vi-VN')}đ)</p>
               )}
               <div className="border-t border-slate-200 pt-2 flex items-center justify-between text-sm font-bold">
                 <span>Số tiền thanh toán khi nhận hàng:</span>
@@ -642,21 +715,28 @@ export default function CheckoutPage() {
               </div>
 
               {/* Right Column: Vouchers & Order Summary */}
-              <div className="w-full lg:w-[460px] space-y-6">
+              <div className="w-full lg:w-[480px] space-y-6">
                 
-                {/* Vouchers & Promotions Box */}
+                {/* Vouchers & Promotions Box with 2 Categories */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                      <TagIcon className="w-5 h-5 text-purple-600" />
-                      Mã khuyến mãi & Giảm giá
-                    </h2>
-                    {selectedPromo && (
+                    <div>
+                      <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                        <TagIcon className="w-5 h-5 text-purple-600" />
+                        Mã Khuyến Mãi & Giảm Giá
+                      </h2>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Áp dụng đồng thời mã Quán và mã Sàn nếu đủ điều kiện</p>
+                    </div>
+                    {(selectedShopPromo || selectedPlatformPromo) && (
                       <button 
-                        onClick={() => handleApplyVoucher(null)} 
-                        className="text-xs text-rose-600 hover:underline font-semibold cursor-pointer"
+                        onClick={() => {
+                          setSelectedShopPromo(null);
+                          setSelectedPlatformPromo(null);
+                          setPromoMessage(null);
+                        }} 
+                        className="text-xs text-rose-600 hover:underline font-bold cursor-pointer"
                       >
-                        Bỏ áp dụng
+                        Bỏ chọn tất cả
                       </button>
                     )}
                   </div>
@@ -665,15 +745,15 @@ export default function CheckoutPage() {
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="Nhập mã voucher..."
+                      placeholder="Nhập mã voucher (Quán hoặc Sàn)..."
                       value={customPromoCode}
                       onChange={e => setCustomPromoCode(e.target.value.toUpperCase())}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-mono font-bold uppercase outline-none focus:border-purple-600"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-mono font-bold uppercase outline-none focus:border-purple-600 focus:bg-white transition-colors"
                     />
                     <button
                       type="button"
                       onClick={handleApplyCustomCode}
-                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
                     >
                       Áp dụng
                     </button>
@@ -695,64 +775,219 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
-                  {/* Available vouchers list */}
-                  <div className="space-y-2 pt-1">
-                    <p className="text-xs font-semibold text-slate-600">Voucher khả dụng cho đơn này:</p>
+                  {/* Tab switchers */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl gap-1 text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setPromoTab('ALL')}
+                      className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer text-center ${
+                        promoTab === 'ALL' 
+                          ? 'bg-white text-slate-900 shadow-2xs' 
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Tất cả ({shopPromotions.length + platformPromotions.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPromoTab('SHOP')}
+                      className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 ${
+                        promoTab === 'SHOP' 
+                          ? 'bg-white text-orange-600 shadow-2xs' 
+                          : 'text-slate-600 hover:text-orange-600'
+                      }`}
+                    >
+                      <span>🏪 Quán</span>
+                      <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 rounded-full">
+                        {shopPromotions.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPromoTab('PLATFORM')}
+                      className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 ${
+                        promoTab === 'PLATFORM' 
+                          ? 'bg-white text-blue-600 shadow-2xs' 
+                          : 'text-slate-600 hover:text-blue-600'
+                      }`}
+                    >
+                      <span>🌐 Hệ Thống</span>
+                      <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 rounded-full">
+                        {platformPromotions.length}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Vouchers Container */}
+                  <div className="space-y-4 max-h-72 overflow-y-auto pr-1">
                     {loadingPromos ? (
-                      <p className="text-xs text-slate-400 italic">Đang tải mã khuyến mãi...</p>
-                    ) : promotions.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic">Quán chưa có mã khuyến mãi khả dụng.</p>
-                    ) : (
-                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                        {promotions.map((promo) => {
-                          const isSelected = selectedPromo?.code === promo.code;
-                          const isEligible = subtotal >= Number(promo.minOrderValue || 0);
-
-                          return (
-                            <div
-                              key={promo.id || promo.code}
-                              onClick={() => isEligible && handleApplyVoucher(isSelected ? null : promo)}
-                              className={`p-3 rounded-xl border text-xs transition-all flex items-center justify-between gap-3 ${
-                                isSelected 
-                                  ? 'border-purple-600 bg-purple-50/60 shadow-2xs' 
-                                  : isEligible 
-                                  ? 'border-slate-200 hover:border-purple-300 bg-white cursor-pointer' 
-                                  : 'border-slate-100 bg-slate-50/50 opacity-60 cursor-not-allowed'
-                              }`}
-                            >
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono font-bold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded text-xs tracking-wider">
-                                    {promo.code}
-                                  </span>
-                                  <span className="text-[11px] font-bold text-slate-800">
-                                    {promo.promoType === 'PERCENT'
-                                      ? `Giảm ${promo.discountValue}% (Tối đa ${Number(promo.maxDiscountAmount || 0).toLocaleString('vi-VN')}đ)`
-                                      : `Giảm ${Number(promo.discountValue).toLocaleString('vi-VN')}đ`}
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-slate-500">
-                                  Đơn tối thiểu: <b>{Number(promo.minOrderValue || 0).toLocaleString('vi-VN')}đ</b>
-                                </p>
-                              </div>
-
-                              <button
-                                type="button"
-                                disabled={!isEligible}
-                                className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer shrink-0 ${
-                                  isSelected 
-                                    ? 'bg-purple-600 text-white' 
-                                    : isEligible 
-                                    ? 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200' 
-                                    : 'bg-slate-200 text-slate-400'
-                                }`}
-                              >
-                                {isSelected ? 'Đang dùng' : 'Chọn'}
-                              </button>
-                            </div>
-                          );
-                        })}
+                      <div className="py-8 text-center text-xs text-slate-400 italic">
+                        Đang tải danh sách ưu đãi...
                       </div>
+                    ) : (
+                      <>
+                        {/* CATEGORY 1: SHOP VOUCHERS */}
+                        {(promoTab === 'ALL' || promoTab === 'SHOP') && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-orange-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                🏪 Khuyến Mãi Từ Quán ({shopPromotions.length})
+                              </span>
+                              {selectedShopPromo && (
+                                <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                  Đã chọn: {selectedShopPromo.code}
+                                </span>
+                              )}
+                            </div>
+
+                            {shopPromotions.length === 0 ? (
+                              <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                Quán hiện chưa phát hành voucher độc quyền.
+                              </p>
+                            ) : (
+                              shopPromotions.map((promo) => {
+                                const isSelected = selectedShopPromo?.code === promo.code;
+                                const isEligible = subtotal >= Number(promo.minOrderValue || 0);
+                                const neededMore = Number(promo.minOrderValue || 0) - subtotal;
+
+                                const discountLabel = promo.promoType === 'PERCENT'
+                                  ? `Giảm ${promo.discountValue}%`
+                                  : promo.promoType === 'FREE_DELIVERY'
+                                  ? 'Freeship'
+                                  : `Giảm ${Number(promo.discountValue).toLocaleString('vi-VN')}đ`;
+
+                                return (
+                                  <div
+                                    key={promo.id || promo.code}
+                                    onClick={() => isEligible && handleToggleShopVoucher(promo)}
+                                    className={`p-3 rounded-xl border text-xs transition-all flex items-center justify-between gap-3 ${
+                                      isSelected 
+                                        ? 'border-orange-500 bg-orange-50/70 shadow-2xs ring-1 ring-orange-400' 
+                                        : isEligible 
+                                        ? 'border-amber-200 hover:border-orange-400 bg-white cursor-pointer hover:shadow-2xs' 
+                                        : 'border-slate-100 bg-slate-50/60 opacity-60 cursor-not-allowed'
+                                    }`}
+                                  >
+                                    <div className="space-y-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-mono font-black text-orange-700 bg-orange-100 px-2 py-0.5 rounded text-xs tracking-wider shrink-0 border border-orange-200">
+                                          {promo.code}
+                                        </span>
+                                        <span className="text-[11px] font-bold text-slate-900 truncate">
+                                          {discountLabel} {promo.maxDiscountAmount ? `(Tối đa ${Number(promo.maxDiscountAmount).toLocaleString('vi-VN')}đ)` : ''}
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-slate-500">
+                                        Đơn tối thiểu: <b>{Number(promo.minOrderValue || 0).toLocaleString('vi-VN')}đ</b>
+                                        {!isEligible && neededMore > 0 && (
+                                          <span className="text-amber-700 font-semibold block text-[10px]">
+                                            (Mua thêm {neededMore.toLocaleString('vi-VN')}đ để dùng)
+                                          </span>
+                                        )}
+                                      </p>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      disabled={!isEligible}
+                                      className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all shrink-0 cursor-pointer ${
+                                        isSelected 
+                                          ? 'bg-orange-600 text-white shadow-xs' 
+                                          : isEligible 
+                                          ? 'bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200' 
+                                          : 'bg-slate-200 text-slate-400'
+                                      }`}
+                                    >
+                                      {isSelected ? 'Đang dùng' : 'Chọn'}
+                                    </button>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+
+                        {/* CATEGORY 2: PLATFORM / SYSTEM VOUCHERS */}
+                        {(promoTab === 'ALL' || promoTab === 'PLATFORM') && (
+                          <div className="space-y-2 pt-2 border-t border-slate-100">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-blue-700 flex items-center gap-1.5 uppercase tracking-wide">
+                                🌐 Khuyến Mãi Toàn Sàn / Hệ Thống ({platformPromotions.length})
+                              </span>
+                              {selectedPlatformPromo && (
+                                <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                  Đã chọn: {selectedPlatformPromo.code}
+                                </span>
+                              )}
+                            </div>
+
+                            {platformPromotions.length === 0 ? (
+                              <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                Không có mã khuyến mãi sàn nào khả dụng lúc này.
+                              </p>
+                            ) : (
+                              platformPromotions.map((promo) => {
+                                const isSelected = selectedPlatformPromo?.code === promo.code;
+                                const isEligible = subtotal >= Number(promo.minOrderValue || 0);
+                                const neededMore = Number(promo.minOrderValue || 0) - subtotal;
+
+                                const discountLabel = promo.promoType === 'PERCENT'
+                                  ? `Giảm ${promo.discountValue}%`
+                                  : promo.promoType === 'FREE_DELIVERY'
+                                  ? 'Freeship Toàn Sàn'
+                                  : `Giảm ${Number(promo.discountValue).toLocaleString('vi-VN')}đ`;
+
+                                return (
+                                  <div
+                                    key={promo.id || promo.code}
+                                    onClick={() => isEligible && handleTogglePlatformVoucher(promo)}
+                                    className={`p-3 rounded-xl border text-xs transition-all flex items-center justify-between gap-3 ${
+                                      isSelected 
+                                        ? 'border-blue-500 bg-blue-50/70 shadow-2xs ring-1 ring-blue-400' 
+                                        : isEligible 
+                                        ? 'border-blue-200 hover:border-blue-400 bg-white cursor-pointer hover:shadow-2xs' 
+                                        : 'border-slate-100 bg-slate-50/60 opacity-60 cursor-not-allowed'
+                                    }`}
+                                  >
+                                    <div className="space-y-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-mono font-black text-blue-700 bg-blue-100 px-2 py-0.5 rounded text-xs tracking-wider shrink-0 border border-blue-200">
+                                          {promo.code}
+                                        </span>
+                                        <span className="text-[11px] font-bold text-slate-900 truncate">
+                                          {discountLabel} {promo.maxDiscountAmount ? `(Tối đa ${Number(promo.maxDiscountAmount).toLocaleString('vi-VN')}đ)` : ''}
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-slate-500">
+                                        Đơn tối thiểu: <b>{Number(promo.minOrderValue || 0).toLocaleString('vi-VN')}đ</b>
+                                        {!isEligible && neededMore > 0 && (
+                                          <span className="text-amber-700 font-semibold block text-[10px]">
+                                            (Mua thêm {neededMore.toLocaleString('vi-VN')}đ để dùng)
+                                          </span>
+                                        )}
+                                      </p>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      disabled={!isEligible}
+                                      className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all shrink-0 cursor-pointer ${
+                                        isSelected 
+                                          ? 'bg-blue-600 text-white shadow-xs' 
+                                          : isEligible 
+                                          ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200' 
+                                          : 'bg-slate-200 text-slate-400'
+                                      }`}
+                                    >
+                                      {isSelected ? 'Đang dùng' : 'Chọn'}
+                                    </button>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -809,13 +1044,33 @@ export default function CheckoutPage() {
                       <span className="font-semibold text-slate-900">{deliveryFee.toLocaleString('vi-VN')} đ</span>
                     </div>
 
-                    {discountAmount > 0 && (
+                    {/* Shop Discount Breakdown */}
+                    {shopDiscount > 0 && (
+                      <div className="flex justify-between items-center text-orange-600 font-semibold">
+                        <span className="flex items-center gap-1">
+                          <SparklesIcon className="w-4 h-4" />
+                          Giảm giá Quán ({selectedShopPromo?.code}):
+                        </span>
+                        <span>- {shopDiscount.toLocaleString('vi-VN')} đ</span>
+                      </div>
+                    )}
+
+                    {/* Platform Discount Breakdown */}
+                    {platformDiscount > 0 && (
                       <div className="flex justify-between items-center text-purple-700 font-semibold">
                         <span className="flex items-center gap-1">
                           <SparklesIcon className="w-4 h-4" />
-                          Giảm giá voucher ({selectedPromo?.code}):
+                          Giảm giá Hệ Thống ({selectedPlatformPromo?.code}):
                         </span>
-                        <span>- {discountAmount.toLocaleString('vi-VN')} đ</span>
+                        <span>- {platformDiscount.toLocaleString('vi-VN')} đ</span>
+                      </div>
+                    )}
+
+                    {/* Total Savings */}
+                    {totalDiscount > 0 && (
+                      <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5 flex justify-between items-center text-[11px] text-emerald-800 font-bold">
+                        <span>Tiết kiệm được:</span>
+                        <span>- {totalDiscount.toLocaleString('vi-VN')} đ</span>
                       </div>
                     )}
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ProductCard from '@/components/menu/ProductCard';
+import ShopWelcomeVoucherModal from '@/components/menu/ShopWelcomeVoucherModal';
 
 export default function CategoryPage() {
   const { shopId, categoryId } = useParams();
@@ -66,6 +67,13 @@ export default function CategoryPage() {
 
   return (
     <div className="flex w-full mx-auto max-w-[1440px] px-4 lg:px-8 relative bg-gray-50/50 pb-16 pt-6 min-h-[80vh]">
+      {shopId && (
+        <ShopWelcomeVoucherModal 
+          key={shopId}
+          shopId={shopId} 
+          shopName={shopDetails?.shopName} 
+        />
+      )}
       <main className="flex-1 w-full flex flex-col">
         
         {/* Nút Quay Lại */}

@@ -72,6 +72,34 @@ export function AdminPromotionsPage({ initialTab = 'PLATFORM' }: AdminPromotions
 
   useEffect(() => {
     loadData();
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('hyperlocal_promotions');
+      bc.onmessage = (event) => {
+        if (
+          event.data?.type === 'PROMOTION_CREATED' ||
+          event.data?.type === 'PROMOTION_UPDATED' ||
+          event.data?.type === 'PROMOTION_APPROVED' ||
+          event.data?.type === 'PROMOTION_REJECTED' ||
+          event.data?.type === 'PROMOTION_TOGGLED'
+        ) {
+          loadData();
+        }
+      };
+    } catch (e) {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'hyperlocal_promo_event') {
+        loadData();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
   useEffect(() => {

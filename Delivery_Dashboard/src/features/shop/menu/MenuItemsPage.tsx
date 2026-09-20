@@ -55,8 +55,10 @@ export function MenuItemsPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const iList = await dbService.getItems(1); // shop 1
-    const cList = await dbService.getCategories(1);
+    const myShop = await dbService.getMyShop();
+    const currentShopId = myShop?.id || 1;
+    const iList = await dbService.getItems(currentShopId);
+    const cList = await dbService.getCategories(currentShopId);
     setItems(iList);
     setCategories(cList);
     setLoading(false);
@@ -77,10 +79,12 @@ export function MenuItemsPage() {
       alert('Vui lòng nhập tên món và giá gốc!');
       return;
     }
+    const myShop = await dbService.getMyShop();
+    const currentShopId = myShop?.id || 1;
     const cat = categories.find((c) => c.id === editingItem.category_id);
     await dbService.saveItem({
       ...editingItem,
-      shop_id: 1,
+      shop_id: currentShopId,
       category_name: cat?.name || 'Món ăn',
     });
     alert('Đã lưu thông tin món ăn!');

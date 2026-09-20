@@ -21,7 +21,9 @@ export function ShopReviewsPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const list = await dbService.getReviews(1); // shop 1
+    const myShop = await dbService.getMyShop();
+    const currentShopId = myShop?.id || 1;
+    const list = await dbService.getReviews(currentShopId);
     setReviews(list);
     setLoading(false);
   };

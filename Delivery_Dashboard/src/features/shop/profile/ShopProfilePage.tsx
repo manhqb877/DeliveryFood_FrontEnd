@@ -308,7 +308,12 @@ export function ShopProfilePage() {
   >([]);
 
   useEffect(() => {
-    dbService.getShopById(1).then((s) => {
+    setLoading(true);
+    dbService.getMyShop().then((s) => {
+      if (!s) {
+        setLoading(false);
+        return;
+      }
       setShop(s);
       setShopName(s.shop_name);
       setShopType(s.shop_type || '');
