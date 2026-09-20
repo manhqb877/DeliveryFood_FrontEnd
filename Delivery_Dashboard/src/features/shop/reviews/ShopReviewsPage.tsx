@@ -3,11 +3,13 @@ import { dbService } from '@/api/client';
 import { Review } from '@/api/mockData';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Modal } from '@/components/ui/Modal';
+import { useToast } from '@/components/ui/Toast';
 import { Star, MessageSquare, CornerDownRight, Check, ThumbsUp, Sparkles, UtensilsCrossed, Bike, Clock, User } from 'lucide-react';
 
 export function ShopReviewsPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   // Filter
   const [filterRating, setFilterRating] = useState<string>('ALL');
@@ -31,11 +33,14 @@ export function ShopReviewsPage() {
   const handleSendReply = async () => {
     if (!selectedReview) return;
     if (!replyInput.trim()) {
-      alert('Vui lòng nhập nội dung phản hồi!');
+      toast.warning('Vui lòng nhập nội dung phản hồi trước khi gửi!', 'Nội Dung Trống');
       return;
     }
     await dbService.replyReview(selectedReview.id, replyInput);
-    alert('Đã gửi phản hồi đánh giá của khách hàng!');
+    toast.success(
+      `Đã gửi phản hồi đánh giá cho đơn #${selectedReview.order_code}!`,
+      'Phản Hồi Thành Công'
+    );
     setSelectedReview(null);
     setReplyInput('');
     loadData();
