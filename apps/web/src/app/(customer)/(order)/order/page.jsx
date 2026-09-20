@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { TagIcon, SparklesIcon, BuildingStorefrontIcon } from '@heroicons/react/24/outline';
 import ProductCard from '@/components/menu/ProductCard';
 import FlashSaleSection from '@/components/menu/FlashSaleSection';
+import ShopWelcomeVoucherModal from '@/components/menu/ShopWelcomeVoucherModal';
 import Link from 'next/link';
 
 const banners = [
@@ -93,6 +94,14 @@ export default function OrderPage() {
 
   return (
     <div className="flex w-full mx-auto max-w-[1440px] px-4 lg:px-8 relative bg-white pb-10 pt-6">
+      {/* Welcome Voucher Modal with Celebration Confetti */}
+      {selectedShopId && (
+        <ShopWelcomeVoucherModal 
+          key={selectedShopId}
+          shopId={selectedShopId} 
+          shopName={shopDetails?.shopName} 
+        />
+      )}
       
       <main className="flex-1 flex flex-col min-w-0 relative">
         <div className="w-full bg-white">
