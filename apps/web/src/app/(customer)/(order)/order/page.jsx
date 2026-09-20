@@ -7,7 +7,7 @@ import FlashSaleSection from '@/components/menu/FlashSaleSection';
 import Link from 'next/link';
 
 const banners = [
-  "https://digifnb.com/wp-content/uploads/2025/02/image-2-compressed-48.jpg",
+  "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&auto=format&fit=crop&q=80",
   "https://imgmainsite.be.com.vn/2022/02/58cc93dd-landing-page-phase-2-01_04.jpg",
   "https://imgmainsite.be.com.vn/2022/07/2c763054-810x540_freeship-m%E1%BB%8Di-%C4%91%C6%A1n-h%C3%A0ng.jpg"
 ];
