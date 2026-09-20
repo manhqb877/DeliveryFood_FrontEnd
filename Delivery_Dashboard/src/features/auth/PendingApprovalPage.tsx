@@ -13,6 +13,10 @@ export function PendingApprovalPage() {
 
   const checkStatus = async () => {
     setLoading(true);
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
     const shops = await dbService.getShops();
     const userShops = shops.filter((s) => s.owner_id === currentUser.id);
     const currentShop = userShops.length > 0 ? userShops[0] : null;
@@ -32,7 +36,7 @@ export function PendingApprovalPage() {
 
   useEffect(() => {
     checkStatus();
-  }, [currentUser.id]);
+  }, [currentUser?.id]);
 
   return (
     <div
