@@ -57,44 +57,63 @@ export function LoginPage() {
     setError('');
 
     try {
-      const users = await dbService.getUsers();
-      const input = phoneOrEmail.trim().toLowerCase();
+      const response = await fetch('http://localhost:8080/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneOrEmail.trim().toLowerCase(), password }),
+      });
 
-      // Find user
-      const found = users.find(
-        (u) =>
-          (u.phone.toLowerCase() === input || (u.email && u.email.toLowerCase() === input)) &&
-          (portalView === 'admin' ? u.role === 'ADMIN' : u.role === 'SHOP_MANAGER')
-      );
+      const result = await response.json();
 
-      if (found) {
-        if (found.role === 'SHOP_MANAGER' && found.status === 'PENDING') {
-          login(found);
+      if (response.ok && result.status === 200 && result.data) {
+        const { accessToken, user } = result.data;
+        
+        // Lưu token thật vào localStorage
+        localStorage.setItem('hyperlocal_access_token', accessToken);
+
+        // Map UserResponse từ Backend sang chuẩn Mock User của UI
+        const loggedInUser: any = {
+          id: user.id,
+          phone: user.phone || phoneOrEmail.trim(),
+          email: user.email,
+          full_name: user.fullName || 'Người Dùng',
+          role: user.role,
+          status: user.status,
+          area_id: user.areaId || 1,
+          is_area_verified: user.isAreaVerified || true,
+          created_at: user.createdAt || new Date().toISOString()
+        };
+
+        // Xác thực đúng Portal
+        if (portalView === 'admin' && loggedInUser.role !== 'ADMIN') {
+           setError('Tài khoản này không phải Admin. Vui lòng chuyển sang cổng tương ứng!');
+           setLoading(false);
+           return;
+        }
+        if (portalView === 'shop' && loggedInUser.role !== 'SHOP_MANAGER') {
+           setError('Tài khoản này không phải Shop Manager. Vui lòng chuyển sang cổng tương ứng!');
+           setLoading(false);
+           return;
+        }
+
+        if (loggedInUser.role === 'SHOP_MANAGER' && loggedInUser.status === 'PENDING') {
+          login(loggedInUser);
           navigate('/pending-approval');
           return;
         }
 
-        login(found);
-        if (found.role === 'ADMIN') {
+        login(loggedInUser);
+        if (loggedInUser.role === 'ADMIN') {
           navigate('/admin/reports');
         } else {
           navigate('/shop/orders');
         }
       } else {
-        const anyUser = users.find(
-          (u) => u.phone.toLowerCase() === input || (u.email && u.email.toLowerCase() === input)
-        );
-        if (anyUser) {
-          setError(
-            `Tài khoản này thuộc quyền ${
-              anyUser.role === 'ADMIN' ? 'Admin' : 'Shop Manager'
-            }. Vui lòng chuyển sang cổng tương ứng!`
-          );
-        } else {
-          setError('Số điện thoại/Email hoặc mật khẩu không chính xác!');
-        }
+        // Bắt lỗi từ Backend
+        setError(result.message || 'Số điện thoại/Email hoặc mật khẩu không chính xác!');
       }
-    } catch {
+    } catch (err) {
+      console.error(err);
       setError('Có lỗi xảy ra khi kết nối máy chủ!');
     } finally {
       setLoading(false);

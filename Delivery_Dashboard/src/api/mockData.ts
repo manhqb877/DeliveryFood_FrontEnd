@@ -490,6 +490,7 @@ export const initialUsers: User[] = [
   { id: 8, phone: '0908888888', email: 'khach.binh@gmail.com', full_name: 'Vũ Minh Bình', role: 'CUSTOMER', status: 'LOCKED', area_id: 2, is_area_verified: true, created_at: '2025-02-15T09:00:00Z' },
   { id: 9, phone: '0909999999', email: 'khach.chau@gmail.com', full_name: 'Phạm Thị Châu', role: 'CUSTOMER', status: 'ACTIVE', area_id: 1, is_area_verified: true, created_at: '2025-03-01T10:00:00Z' },
   { id: 10, phone: '0910000001', email: 'khach.dung@gmail.com', full_name: 'Trần Văn Dũng', role: 'CUSTOMER', status: 'ACTIVE', area_id: 1, is_area_verified: true, created_at: '2025-03-15T11:00:00Z' },
+  { id: 38, phone: '0900000000', email: 'shop_new_0@befood.com', full_name: 'Cua Bac - Juice & Fruit (Demo)', role: 'SHOP_MANAGER', status: 'ACTIVE', area_id: 1, is_area_verified: true, created_at: '2025-01-05T10:00:00Z' },
 ];
 
 export const initialShops: ShopProfile[] = [
@@ -615,6 +616,38 @@ export const initialShops: ShopProfile[] = [
     created_at: '2025-09-10T09:00:00Z',
     avg_rating: 0,
     total_reviews: 0
+  },
+  {
+    id: 38,
+    owner_id: 38,
+    owner_name: 'Cua Bac - Juice & Fruit (Demo)',
+    area_id: 1,
+    area_name: 'Vinhomes Grand Park Q9',
+    location_detail: 'Demo location',
+    shop_lat: 10.8420,
+    shop_lng: 106.8370,
+    shop_name: 'Cua Bac - Juice & Fruit',
+    shop_description: 'Nước ép trái cây tươi ngon.',
+    logo_url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300&auto=format&fit=crop&q=80',
+    cover_image_url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80',
+    phone: '0900000000',
+    email: 'shop_new_0@befood.com',
+    business_hours: [
+      { day: 0, open: '08:00', close: '21:00', is_closed: false },
+      { day: 1, open: '08:00', close: '21:00', is_closed: false },
+      { day: 2, open: '08:00', close: '21:00', is_closed: false },
+      { day: 3, open: '08:00', close: '21:00', is_closed: false },
+      { day: 4, open: '08:00', close: '21:00', is_closed: false },
+      { day: 5, open: '08:00', close: '21:00', is_closed: false },
+      { day: 6, open: '08:00', close: '21:00', is_closed: false },
+    ],
+    approval_status: 'APPROVED',
+    is_open: true,
+    is_accepting_orders: true,
+    documents: [],
+    created_at: '2025-01-05T10:00:00Z',
+    avg_rating: 5,
+    total_reviews: 10
   }
 ];
 
