@@ -4,7 +4,8 @@ import { ShopProfile } from '@/api/mockData';
 import {
   AlertCircle, Clock, MapPin, Save, Store, CheckCircle, ShieldAlert,
   Phone, Mail, Globe, FileText, Building2, Layers, Hash,
-  Users, Timer, ShoppingCart, Percent, Info, ChevronDown, ChevronUp
+  Users, Timer, ShoppingCart, Percent, Info, ChevronDown, ChevronUp,
+  Upload, Trash2, Link as LinkIcon, Camera, X
 } from 'lucide-react';
 
 // ---- Form Section wrapper ----
@@ -25,6 +26,193 @@ function FormSection({ title, icon: Icon, children, defaultOpen = true }: {
         {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
       </button>
       {open && <div className="px-5 pb-5 border-t border-slate-100">{children}</div>}
+    </div>
+  );
+}
+
+// ---- Image Upload Field (from Computer / File & URL) ----
+function ImageUploadField({
+  label,
+  value,
+  onChange,
+  aspect = 'square',
+  hint,
+  required
+}: {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  aspect?: 'square' | 'banner';
+  hint?: string;
+  required?: boolean;
+}) {
+  const [isUrlMode, setIsUrlMode] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (file: File) => {
+    setError(null);
+    if (!file.type.startsWith('image/')) {
+      setError('Vui lòng chọn file hình ảnh hợp lệ (PNG, JPG, WEBP, GIF)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Kích thước ảnh tối đa là 5MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        onChange(e.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="block text-xs font-semibold text-slate-700">
+          {label} {required && <span className="text-rose-500">*</span>}
+        </label>
+        <button
+          type="button"
+          onClick={() => setIsUrlMode(!isUrlMode)}
+          className="text-[11px] text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+        >
+          {isUrlMode ? (
+            <>
+              <Upload className="w-3 h-3" /> Tải từ máy tính
+            </>
+          ) : (
+            <>
+              <LinkIcon className="w-3 h-3" /> Nhập link URL
+            </>
+          )}
+        </button>
+      </div>
+
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={(e) => {
+          if (e.target.files && e.target.files[0]) {
+            handleFileSelect(e.target.files[0]);
+          }
+        }}
+        accept="image/png, image/jpeg, image/webp, image/gif"
+        className="hidden"
+      />
+
+      {isUrlMode ? (
+        <div className="space-y-2">
+          <div className="relative">
+            <LinkIcon className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder="https://..."
+              className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition-all"
+            />
+          </div>
+          {value && (
+            <div className="relative group inline-block">
+              <img
+                src={value}
+                alt="Preview"
+                className={`rounded-xl object-cover border border-slate-200 shadow-xs ${
+                  aspect === 'square' ? 'w-24 h-24' : 'w-full h-32'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => onChange('')}
+                className="absolute top-1 right-1 p-1 bg-rose-600 hover:bg-rose-700 text-white rounded-full shadow cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Xóa ảnh"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          {value ? (
+            <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shadow-xs">
+              <div
+                className={`relative overflow-hidden ${
+                  aspect === 'square' ? 'w-32 h-32 mx-auto sm:mx-0' : 'w-full h-40'
+                }`}
+              >
+                <img
+                  src={value}
+                  alt="Preview"
+                  className="w-full h-full object-cover rounded-xl"
+                />
+                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 bg-white text-slate-800 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5 cursor-pointer transition-all hover:bg-slate-50 hover:scale-105"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-blue-600" /> Đổi ảnh từ máy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChange('')}
+                    className="p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-sm cursor-pointer transition-all hover:scale-105"
+                    title="Xóa ảnh"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 ${
+                dragOver
+                  ? 'border-blue-500 bg-blue-50/50 scale-[1.01]'
+                  : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50/60 bg-slate-50/30'
+              } ${aspect === 'banner' ? 'h-40' : 'h-36'}`}
+            >
+              <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shadow-xs">
+                {aspect === 'square' ? <Camera className="w-5 h-5" /> : <Upload className="w-5 h-5" />}
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-700">
+                  <span className="text-blue-600 underline">Chọn ảnh từ máy tính</span> hoặc kéo thả vào đây
+                </p>
+                <p className="text-[10px] text-slate-400">
+                  {aspect === 'square'
+                    ? 'Ảnh vuông (1:1), tối thiểu 300×300px, PNG, JPG, WEBP (tối đa 5MB)'
+                    : 'Ảnh banner ngang (16:9), tối thiểu 800×450px, PNG, JPG, WEBP (tối đa 5MB)'}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && <p className="text-xs text-rose-500 font-medium">{error}</p>}
+      {hint && !error && <p className="text-[10px] text-slate-400">{hint}</p>}
     </div>
   );
 }
@@ -111,6 +299,7 @@ export function ShopProfilePage() {
   const [avgPrepTime, setAvgPrepTime] = useState('');
   const [minOrderValue, setMinOrderValue] = useState('');
   const [shipperModel, setShipperModel] = useState('');
+  const [isOpen, setIsOpen] = useState(true);
   const [isAcceptingOrders, setIsAcceptingOrders] = useState(true);
 
   // === Hours ===
@@ -141,6 +330,7 @@ export function ShopProfilePage() {
       setAvgPrepTime(String(s.avg_prep_time_minutes || ''));
       setMinOrderValue(String(s.min_order_value || ''));
       setShipperModel(s.shipper_model || 'PLATFORM');
+      setIsOpen(s.is_open ?? true);
       setIsAcceptingOrders(s.is_accepting_orders);
       setBusinessHours(s.business_hours || []);
       setLoading(false);
@@ -153,6 +343,20 @@ export function ShopProfilePage() {
 
   const handleHourChange = (dayIndex: number, field: 'open' | 'close', val: string) => {
     setBusinessHours(prev => prev.map(h => h.day === dayIndex ? { ...h, [field]: val } : h));
+  };
+
+  const handleToggleOpen = async (val: boolean) => {
+    setIsOpen(val);
+    if (shop) {
+      await dbService.toggleShopOpenStatus(shop.id, val);
+    }
+  };
+
+  const handleToggleAccepting = async (val: boolean) => {
+    setIsAcceptingOrders(val);
+    if (shop) {
+      await dbService.toggleShopAcceptingOrders(shop.id, val);
+    }
   };
 
   const handleSaveProfile = async () => {
@@ -179,6 +383,7 @@ export function ShopProfilePage() {
       avg_prep_time_minutes: Number(avgPrepTime) || undefined,
       min_order_value: Number(minOrderValue) || undefined,
       shipper_model: shipperModel as ShopProfile['shipper_model'],
+      is_open: isOpen,
       is_accepting_orders: isAcceptingOrders,
       business_hours: businessHours,
     });
@@ -315,19 +520,21 @@ export function ShopProfilePage() {
 
       {/* ---- Section 4: Hình ảnh ---- */}
       <FormSection title="Hình Ảnh Gian Hàng" icon={Store}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-          <div>
-            <InputField label="URL Logo / Avatar Quán" value={logoUrl} onChange={setLogoUrl} placeholder="https://..." hint="Ảnh vuông, tối thiểu 300×300px" />
-            {logoUrl && (
-              <img src={logoUrl} alt="Logo preview" className="mt-2 w-20 h-20 rounded-xl object-cover border border-slate-200" />
-            )}
-          </div>
-          <div>
-            <InputField label="URL Ảnh Bìa (Banner)" value={coverUrl} onChange={setCoverUrl} placeholder="https://..." hint="Ảnh ngang 16:9, tối thiểu 800×450px" />
-            {coverUrl && (
-              <img src={coverUrl} alt="Cover preview" className="mt-2 w-full h-28 rounded-xl object-cover border border-slate-200" />
-            )}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+          <ImageUploadField
+            label="Logo / Avatar Gian Hàng"
+            value={logoUrl}
+            onChange={setLogoUrl}
+            aspect="square"
+            hint="Hiển thị đại diện cho gian hàng trên danh sách quán, thực đơn và hóa đơn khách hàng"
+          />
+          <ImageUploadField
+            label="Ảnh Bìa Gian Hàng (Banner)"
+            value={coverUrl}
+            onChange={setCoverUrl}
+            aspect="banner"
+            hint="Hiển thị trên đầu trang chi tiết gian hàng và thẻ giới thiệu nổi bật"
+          />
         </div>
       </FormSection>
 
@@ -384,20 +591,37 @@ export function ShopProfilePage() {
               { value: 'HYBRID', label: '🔀 HYBRID — Kết hợp cả hai' },
             ]}
           />
-          <div className="md:col-span-2">
-            <label className="flex items-center gap-3 cursor-pointer group">
+          <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+            <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all">
               <div
-                onClick={() => setIsAcceptingOrders(v => !v)}
-                className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer ${isAcceptingOrders ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                onClick={() => handleToggleOpen(!isOpen)}
+                className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer ${isOpen ? 'bg-emerald-500' : 'bg-slate-300'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${isOpen ? 'translate-x-5' : 'translate-x-0'}`} />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-800">
+                  {isOpen ? '🟢 Quán đang Mở Cửa' : '🔴 Quán đang Đóng Cửa'}
+                </span>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Mở/Đóng quán tạm thời (ngoài giờ hoạt động hoặc nghỉ đột xuất)
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all">
+              <div
+                onClick={() => handleToggleAccepting(!isAcceptingOrders)}
+                className={`relative w-11 h-6 rounded-full transition-colors duration-200 cursor-pointer ${isAcceptingOrders ? 'bg-blue-600' : 'bg-slate-300'}`}
               >
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${isAcceptingOrders ? 'translate-x-5' : 'translate-x-0'}`} />
               </div>
               <div>
-                <span className="text-xs font-semibold text-slate-800">
-                  {isAcceptingOrders ? '✅ Đang nhận đơn hàng' : '⛔ Tạm ngưng nhận đơn'}
+                <span className="text-xs font-bold text-slate-800">
+                  {isAcceptingOrders ? '⚡ Đang Nhận Đơn Hàng' : '⛔ Tạm Ngưng Nhận Đơn'}
                 </span>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  Bật/tắt để nhanh chóng tạm ngừng nhận đơn khi quán bận hoặc hết nguyên liệu
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Bật/tắt để tạm ngưng nhận đơn khi quán quá tải hoặc chuẩn bị đồ
                 </p>
               </div>
             </label>

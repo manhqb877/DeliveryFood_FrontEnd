@@ -351,6 +351,41 @@ export interface CommissionRecord {
   created_at: string;
 }
 
+// ============ Platform Payout Schedule (Lịch chi trả nền tảng M-SHOP-04) ============
+export interface PlatformPayoutSchedule {
+  id: number;
+  period_code: string;
+  period_name: string;
+  start_date: string;
+  end_date: string;
+  payout_date: string;
+  total_orders: number;
+  order_revenue: number;
+  commission_deducted: number;
+  net_payout: number;
+  bank_name: string;
+  bank_account_mask: string;
+  payout_status: 'PAID' | 'PROCESSING' | 'SCHEDULED';
+  transaction_ref?: string;
+  paid_at?: string;
+}
+
+// ============ Promotion Redemption Record (Chống lạm dụng khuyến mãi M-SHOP-05) ============
+export interface PromotionRedemption {
+  id: number;
+  promotion_id: number;
+  promotion_code: string;
+  order_id: number;
+  order_code: string;
+  user_id: number;
+  user_name: string;
+  user_phone: string;
+  order_value: number;
+  discount_amount: number;
+  used_at: string;
+}
+
+
 // ============ NEW: CustomerPurchaseRecord (danh sách khách mua) ============
 export interface CustomerPurchaseRecord {
   user_id: number;
@@ -445,6 +480,7 @@ export const initialIntraZoneMaps: IntraZoneNode[] = [
 
 export const initialUsers: User[] = [
   { id: 1, phone: '0901111111', email: 'admin@hyperlocal.vn', full_name: 'Quản trị viên Hệ thống', role: 'ADMIN', status: 'ACTIVE', created_at: '2025-01-01T00:00:00Z' },
+  { id: 67, phone: '01111111111', email: 'admin.011@hyperlocal.vn', full_name: 'Quản Trị Viên Hệ Thống', role: 'ADMIN', status: 'ACTIVE', created_at: '2026-09-19T16:50:50Z' },
   { id: 2, phone: '0902222222', email: 'lan.comnha@gmail.com', full_name: 'Trần Thị Lan (Cơm Nhà Chị Lan)', role: 'SHOP_MANAGER', status: 'ACTIVE', area_id: 1, is_area_verified: true, created_at: '2025-01-05T10:00:00Z' },
   { id: 3, phone: '0903333333', email: 'phukien.tra@gmail.com', full_name: 'Nguyễn Văn Phú (Trà Sữa KOI)', role: 'SHOP_MANAGER', status: 'ACTIVE', area_id: 1, is_area_verified: true, created_at: '2025-01-08T14:30:00Z' },
   { id: 4, phone: '0904444444', email: 'shop.pending@gmail.com', full_name: 'Lê Hoàng Nam (Bún Bò Huế Xưa)', role: 'SHOP_MANAGER', status: 'PENDING', area_id: 2, is_area_verified: false, created_at: '2025-09-10T09:00:00Z' },
@@ -1099,6 +1135,44 @@ export const initialPromotions: Promotion[] = [
     approval_status: 'PENDING',
     is_active: true,
     created_at: '2026-09-18T10:00:00Z'
+  },
+  {
+    id: 4,
+    code: 'LANHE25K',
+    promo_type: 'FIXED_AMOUNT',
+    scope: 'SHOP',
+    shop_id: 1,
+    shop_name: 'Cơm Nhà Chị Lan - Chuẩn Vị Bắc',
+    discount_value: 25000,
+    min_order_value: 120000,
+    total_limit: 50,
+    used_count: 0,
+    per_user_limit: 1,
+    applicable_to: 'ALL',
+    valid_from: '2026-09-20T00:00:00Z',
+    valid_until: '2026-10-20T23:59:59Z',
+    approval_status: 'PENDING',
+    is_active: true,
+    created_at: '2026-09-19T09:15:00Z'
+  },
+  {
+    id: 5,
+    code: 'BUNBO15K',
+    promo_type: 'FIXED_AMOUNT',
+    scope: 'SHOP',
+    shop_id: 4,
+    shop_name: 'Bún Bò Huế Xưa',
+    discount_value: 15000,
+    min_order_value: 80000,
+    total_limit: 30,
+    used_count: 0,
+    per_user_limit: 1,
+    applicable_to: 'ALL',
+    valid_from: '2026-09-20T00:00:00Z',
+    valid_until: '2026-10-10T23:59:59Z',
+    approval_status: 'PENDING',
+    is_active: true,
+    created_at: '2026-09-19T14:30:00Z'
   }
 ];
 
@@ -1295,3 +1369,99 @@ export const initialHourlyAnalysis: HourlyOrderAnalysis[] = [
   { hour: 20, order_count: 30, revenue: 1350000, avg_prep_time: 11 },
   { hour: 21, order_count: 12, revenue: 540000, avg_prep_time: 9 },
 ];
+
+// ============ NEW Platform Payout Schedules (M-SHOP-04) ============
+export const initialPayoutSchedules: PlatformPayoutSchedule[] = [
+  {
+    id: 1,
+    period_code: '2026-09-K1',
+    period_name: 'Kỳ 1 Tháng 09/2026 (01/09 - 15/09)',
+    start_date: '2026-09-01',
+    end_date: '2026-09-15',
+    payout_date: '2026-09-18',
+    total_orders: 148,
+    order_revenue: 14500000,
+    commission_deducted: 2175000, // 15%
+    net_payout: 12325000,
+    bank_name: 'MB Bank',
+    bank_account_mask: '**** **** 8899',
+    payout_status: 'PAID',
+    transaction_ref: 'MB-FT260918-091223',
+    paid_at: '2026-09-18T10:30:00Z'
+  },
+  {
+    id: 2,
+    period_code: '2026-09-K2',
+    period_name: 'Kỳ 2 Tháng 09/2026 (16/09 - 30/09)',
+    start_date: '2026-09-16',
+    end_date: '2026-09-30',
+    payout_date: '2026-10-03',
+    total_orders: 52,
+    order_revenue: 5200000,
+    commission_deducted: 780000,
+    net_payout: 4420000,
+    bank_name: 'MB Bank',
+    bank_account_mask: '**** **** 8899',
+    payout_status: 'PROCESSING',
+    transaction_ref: 'CHỜ_CHUYỂN_KHOẢN'
+  },
+  {
+    id: 3,
+    period_code: '2026-10-K1',
+    period_name: 'Kỳ 1 Tháng 10/2026 (01/10 - 15/10)',
+    start_date: '2026-10-01',
+    end_date: '2026-10-15',
+    payout_date: '2026-10-18',
+    total_orders: 0,
+    order_revenue: 0,
+    commission_deducted: 0,
+    net_payout: 0,
+    bank_name: 'MB Bank',
+    bank_account_mask: '**** **** 8899',
+    payout_status: 'SCHEDULED'
+  }
+];
+
+// ============ NEW Promotion Redemptions (M-SHOP-05 Anti-Abuse Audit) ============
+export const initialPromotionRedemptions: PromotionRedemption[] = [
+  {
+    id: 1,
+    promotion_id: 2,
+    promotion_code: 'LAN20K',
+    order_id: 102,
+    order_code: 'ORD-20260918-B202',
+    user_id: 9,
+    user_name: 'Phạm Thị Châu',
+    user_phone: '0909999999',
+    order_value: 120000,
+    discount_amount: 20000,
+    used_at: '2026-09-18T16:45:00Z'
+  },
+  {
+    id: 2,
+    promotion_id: 2,
+    promotion_code: 'LAN20K',
+    order_id: 103,
+    order_code: 'ORD-20260918-C303',
+    user_id: 8,
+    user_name: 'Vũ Minh Bình',
+    user_phone: '0908888888',
+    order_value: 140000,
+    discount_amount: 20000,
+    used_at: '2026-09-18T16:10:00Z'
+  },
+  {
+    id: 3,
+    promotion_id: 1,
+    promotion_code: 'CHUNGCU15K',
+    order_id: 101,
+    order_code: 'ORD-20260918-A101',
+    user_id: 7,
+    user_name: 'Nguyễn Thị An',
+    user_phone: '0907777777',
+    order_value: 90000,
+    discount_amount: 15000,
+    used_at: '2026-09-18T16:50:00Z'
+  }
+];
+

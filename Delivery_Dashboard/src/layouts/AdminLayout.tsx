@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthGuard';
 import {
   BarChart3,
@@ -13,6 +13,7 @@ import {
   Receipt,
   MapPin,
   Tag,
+  Ticket,
   LogOut,
   Shield,
   ArrowRightLeft
@@ -45,6 +46,7 @@ export function AdminLayout() {
         { path: '/admin/accounts', label: 'Tài khoản người dùng', icon: <Users className="w-4 h-4" /> },
         { path: '/admin/shop-approvals', label: 'Duyệt gian hàng', icon: <Store className="w-4 h-4" /> },
         { path: '/admin/shipper-approvals', label: 'Duyệt Shipper', icon: <Bike className="w-4 h-4" /> },
+        { path: '/admin/promotion-approvals', label: 'Duyệt khuyến mãi Shop', icon: <Ticket className="w-4 h-4" /> },
       ],
     },
     {
@@ -138,7 +140,10 @@ export function AdminLayout() {
             </div>
 
             <button
-              onClick={logout}
+              onClick={() => {
+                logout();
+                navigate('/login');
+              }}
               title="Đăng xuất"
               className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
             >
