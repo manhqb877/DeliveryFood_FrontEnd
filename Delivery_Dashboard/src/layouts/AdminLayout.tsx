@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthGuard';
+import { dbService } from '@/api/client';
+import { useToast } from '@/components/ui/Toast';
 import {
   BarChart3,
   Users,
@@ -32,6 +34,78 @@ interface MenuGroup {
 
 export function AdminLayout() {
   const { currentUser, setRole, logout } = useAuth();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [pendingPromoCount, setPendingPromoCount] = useState<number>(0);
+
+  const fetchPendingPromoCount = async () => {
+    try {
+      const promos = await dbService.getPromotions('SHOP');
+      const pending = promos.filter((p) => p.approval_status === 'PENDING').length;
+      setPendingPromoCount(pending);
+    } catch (e) {}
+  };
+
+  const playChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        const now = ctx.currentTime;
+        osc.frequency.setValueAtTime(587.33, now);
+        osc.frequency.setValueAtTime(880.00, now + 0.12);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchPendingPromoCount();
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('hyperlocal_promotions');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'PROMOTION_CREATED') {
+          fetchPendingPromoCount();
+          playChime();
+          const shopName = event.data.shopName || 'Gian hàng';
+          const promoCode = event.data.promo?.code || 'Mã mới';
+          toast.warning(
+            `🔔 Gian hàng "${shopName}" vừa gửi duyệt mã "${promoCode}". Bấm "Duyệt khuyến mãi Shop" để kiểm duyệt ngay!`,
+            'Yêu Cầu Phê Duyệt Khuyến Mãi'
+          );
+        } else if (
+          event.data?.type === 'PROMOTION_APPROVED' ||
+          event.data?.type === 'PROMOTION_REJECTED' ||
+          event.data?.type === 'PROMOTION_UPDATED' ||
+          event.data?.type === 'PROMOTION_TOGGLED'
+        ) {
+          fetchPendingPromoCount();
+        }
+      };
+    } catch (e) {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'hyperlocal_promo_event') {
+        fetchPendingPromoCount();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   const menuGroups: MenuGroup[] = [
     {
@@ -101,15 +175,22 @@ export function AdminLayout() {
                     key={item.path}
                     to={item.path}
                     className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                      `flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                         isActive
                           ? 'bg-blue-600 text-white font-semibold shadow-xs'
                           : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
                       }`
                     }
                   >
-                    {item.icon}
-                    <span>{item.label}</span>
+                    <div className="flex items-center gap-3">
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </div>
+                    {item.path === '/admin/promotion-approvals' && pendingPromoCount > 0 && (
+                      <span className="bg-amber-500 text-slate-950 font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-xs animate-pulse">
+                        {pendingPromoCount}
+                      </span>
+                    )}
                   </NavLink>
                 ))}
               </div>
@@ -131,10 +212,10 @@ export function AdminLayout() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 overflow-hidden">
               <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                {currentUser.full_name.charAt(0)}
+                {currentUser?.full_name ? currentUser.full_name.charAt(0) : 'A'}
               </div>
               <div className="truncate">
-                <p className="text-xs font-semibold text-white truncate">{currentUser.full_name}</p>
+                <p className="text-xs font-semibold text-white truncate">{currentUser?.full_name || 'Quản trị viên'}</p>
                 <p className="text-[10px] text-blue-400 font-medium">ADMIN HỆ THỐNG</p>
               </div>
             </div>

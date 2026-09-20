@@ -98,6 +98,42 @@ export function generateIdempotencyKey(): string {
   return 'idempotency-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now();
 }
 
+function mapBackendShopToProfile(data: any): ShopProfile {
+  return {
+    id: data.id,
+    owner_id: data.ownerId || data.owner_id || 0,
+    owner_name: data.ownerName || data.owner_name || 'Chủ quán',
+    area_id: data.areaId || data.area_id || 1,
+    area_name: data.areaName || data.area_name || 'Vinhomes Grand Park Q9',
+    location_detail: data.locationDetail || data.location_detail || '',
+    building_code: data.buildingCode || data.building_code || '',
+    floor: data.floor || '',
+    unit_number: data.unitNumber || data.unit_number || '',
+    shop_name: data.shopName || data.shop_name,
+    shop_type: data.shopType || data.shop_type || 'COM_TRUA',
+    shop_description: data.shopDescription || data.shop_description || '',
+    logo_url: data.logoUrl || data.logo_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300',
+    cover_image_url: data.coverImageUrl || data.cover_image_url || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800',
+    phone: data.phone || '',
+    email: data.email || '',
+    zalo_link: data.zaloLink || data.zalo_link || '',
+    facebook_link: data.facebookLink || data.facebook_link || '',
+    business_license_number: data.businessLicenseNumber || data.business_license_number || '',
+    food_safety_cert_number: data.foodSafetyCertNumber || data.food_safety_cert_number || '',
+    tax_id: data.taxId || data.tax_id || '',
+    business_hours: Array.isArray(data.businessHours) ? data.businessHours : (data.business_hours || []),
+    approval_status: data.approvalStatus || data.approval_status || 'APPROVED',
+    is_open: data.isOpen ?? data.is_open ?? true,
+    is_accepting_orders: data.isAcceptingOrders ?? data.is_accepting_orders ?? true,
+    avg_rating: data.avgRating || data.avg_rating || 5.0,
+    total_reviews: data.totalReviews || data.total_reviews || 0,
+    shop_lat: data.shopLat ?? data.shop_lat ?? 10.77,
+    shop_lng: data.shopLng ?? data.shop_lng ?? 106.69,
+    documents: data.documents || [],
+    created_at: data.createdAt || data.created_at || new Date().toISOString()
+  };
+}
+
 export const dbService = {
   // USERS
   getUsers: async () => {
@@ -119,8 +155,87 @@ export const dbService = {
   },
 
   // SHOPS
-  getShops: async () => getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops),
-  getShopById: async (id: number) => {
+  getMyShop: async (): Promise<ShopProfile | null> => {
+    const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
+    const currentUserRaw = localStorage.getItem('hyperlocal_current_user');
+    const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
+
+    // 1. Try /api/v1/auth/shops/me if token exists
+    if (token) {
+      try {
+        const res = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            return mapBackendShopToProfile(json.data);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch /shops/me from gateway, trying 8081 directly:', err);
+        try {
+          const directRes = await fetch('http://localhost:8081/api/v1/auth/shops/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (directRes.ok) {
+            const directJson = await directRes.json();
+            if (directJson.data) {
+              return mapBackendShopToProfile(directJson.data);
+            }
+          }
+        } catch (e2) {}
+      }
+    }
+
+    // 2. Try fetching from /api/v1/core/shops and match by ownerId or userId
+    if (currentUser?.id) {
+      try {
+        const res = await fetch('http://localhost:8080/api/v1/core/shops');
+        if (res.ok) {
+          const shopsList = await res.json();
+          if (Array.isArray(shopsList)) {
+            const found = shopsList.find((s: any) => s.ownerId === currentUser.id || s.id === currentUser.id);
+            if (found) {
+              return mapBackendShopToProfile(found);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch /core/shops:', err);
+      }
+    }
+
+    // 3. Fallback to local storage
+    const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
+    if (currentUser?.id) {
+      const localFound = shops.find(s => s.owner_id === currentUser.id);
+      if (localFound) return localFound;
+    }
+    return shops[0] || null;
+  },
+  getShops: async (): Promise<ShopProfile[]> => {
+    try {
+      const res = await fetch('http://localhost:8080/api/v1/core/shops');
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map(mapBackendShopToProfile);
+        }
+      }
+    } catch (e) {
+      console.warn('Using local shops');
+    }
+    return getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
+  },
+  getShopById: async (id: number): Promise<ShopProfile> => {
+    try {
+      const res = await fetch(`http://localhost:8080/api/v1/core/shops/${id}/details`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data) return mapBackendShopToProfile(data);
+      }
+    } catch (e) {}
     const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
     return shops.find(s => s.id === id) || shops[0];
   },
@@ -260,10 +375,10 @@ export const dbService = {
   },
   updateShopProfile: async (shopId: number, data: Partial<ShopProfile>) => {
     // Try calling backend API if auth token exists
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
     if (token) {
       try {
-        const res = await fetch('http://localhost:8081/api/v1/auth/shops/me', {
+        const res = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -284,6 +399,9 @@ export const dbService = {
         if (res.ok) {
           const apiRes = await res.json();
           console.log('Backend profile updated:', apiRes);
+          if (apiRes.data) {
+            return mapBackendShopToProfile(apiRes.data);
+          }
         }
       } catch (err) {
         console.warn('Backend server unreachable, using local storage', err);
@@ -296,10 +414,10 @@ export const dbService = {
     return updated.find(s => s.id === shopId);
   },
   toggleShopOpenStatus: async (shopId: number, isOpen: boolean) => {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
     if (token) {
       try {
-        await fetch(`http://localhost:8081/api/v1/auth/shops/me/open?isOpen=${isOpen}`, {
+        await fetch(`http://localhost:8080/api/v1/auth/shops/me/open?isOpen=${isOpen}`, {
           method: 'PATCH',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -313,10 +431,10 @@ export const dbService = {
     return updated.find(s => s.id === shopId);
   },
   toggleShopAcceptingOrders: async (shopId: number, isAcceptingOrders: boolean) => {
-    const token = localStorage.getItem('auth_token');
+    const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
     if (token) {
       try {
-        await fetch(`http://localhost:8081/api/v1/auth/shops/me/accepting?isAcceptingOrders=${isAcceptingOrders}`, {
+        await fetch(`http://localhost:8080/api/v1/auth/shops/me/accepting?isAcceptingOrders=${isAcceptingOrders}`, {
           method: 'PATCH',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -506,7 +624,11 @@ export const dbService = {
                   base_price: it.basePrice || it.originalPrice || 0,
                   image_url: it.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200',
                   status: it.status,
-                  is_bestseller: false,
+                  daily_sold: it.dailySold || 0,
+                  prep_time_minutes: it.prepTimeMinutes || 15,
+                  tags: it.tags || [],
+                  avg_rating: it.avgRating || 5.0,
+                  total_reviews: it.totalReviews || 0,
                   sort_order: it.id,
                   created_at: new Date().toISOString()
                 });
@@ -637,16 +759,18 @@ export const dbService = {
     try {
       let targetShopId = filters?.shop_id;
       const token = localStorage.getItem('hyperlocal_access_token');
-      if (token) {
-        const meRes = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          if (meData?.data?.id) {
-            targetShopId = meData.data.id;
+      if (!targetShopId && token) {
+        try {
+          const meRes = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData?.data?.id) {
+              targetShopId = meData.data.id;
+            }
           }
-        }
+        } catch (e) {}
       }
 
       if (targetShopId) {
@@ -658,28 +782,28 @@ export const dbService = {
               id: d.id,
               order_code: d.orderCode,
               user_id: d.userId,
-              customer_name: d.deliveryAddress?.recipientName || 'Khách vãng lai',
-              customer_phone: d.deliveryAddress?.phoneNumber || d.deliveryAddress?.recipientPhone || '',
+              customer_name: d.deliveryAddress?.recipientName || d.deliveryAddress?.recipient_name || 'Khách vãng lai',
+              customer_phone: d.deliveryAddress?.phoneNumber || d.deliveryAddress?.recipientPhone || d.deliveryAddress?.recipient_phone || '',
               shop_id: d.shopId,
-              shop_name: d.shopName,
+              shop_name: d.shopName || `Shop #${d.shopId}`,
               area_id: 1, // mock area
               delivery_address: {
-                building: d.deliveryAddress?.address || d.deliveryAddress?.fullAddress || '',
-                unit: '',
-                lat: 0,
-                lng: 0,
-                recipient_name: d.deliveryAddress?.recipientName || '',
-                recipient_phone: d.deliveryAddress?.phoneNumber || d.deliveryAddress?.recipientPhone || '',
+                building: d.deliveryAddress?.address || d.deliveryAddress?.fullAddress || d.deliveryAddress?.building || '',
+                unit: d.deliveryAddress?.unit || '',
+                lat: d.deliveryAddress?.lat || 0,
+                lng: d.deliveryAddress?.lng || 0,
+                recipient_name: d.deliveryAddress?.recipientName || d.deliveryAddress?.recipient_name || '',
+                recipient_phone: d.deliveryAddress?.phoneNumber || d.deliveryAddress?.recipientPhone || d.deliveryAddress?.recipient_phone || '',
                 note: d.deliveryAddress?.note || ''
               },
-              subtotal: d.subtotal,
-              discount_amount: d.discountAmount,
-              delivery_fee: d.deliveryFee,
-              total_amount: d.totalAmount,
-              payment_method: d.paymentMethod,
-              payment_status: d.paymentStatus,
-              order_status: d.orderStatus,
-              order_note: d.orderNote,
+              subtotal: d.subtotal || 0,
+              discount_amount: d.discountAmount || 0,
+              delivery_fee: d.deliveryFee || 0,
+              total_amount: d.totalAmount || 0,
+              payment_method: d.paymentMethod || 'COD',
+              payment_status: d.paymentStatus || 'PENDING',
+              order_status: d.orderStatus || 'PLACED',
+              order_note: d.orderNote || '',
               cancel_reason: d.cancelReason,
               cancelled_by: d.cancelledBy,
               placed_at: d.placedAt,
@@ -719,13 +843,77 @@ export const dbService = {
     if (filters?.status) orders = orders.filter(o => o.order_status === filters.status);
     return orders;
   },
+  getAllOrders: async (): Promise<Order[]> => {
+    try {
+      const res = await fetch('http://localhost:8080/api/v1/orders/admin/all');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          return data.map((d: any) => ({
+            id: d.id,
+            order_code: d.orderCode,
+            user_id: d.userId,
+            customer_name: d.deliveryAddress?.recipientName || d.deliveryAddress?.recipient_name || 'Khách vãng lai',
+            customer_phone: d.deliveryAddress?.phoneNumber || d.deliveryAddress?.recipientPhone || d.deliveryAddress?.recipient_phone || '',
+            shop_id: d.shopId,
+            shop_name: d.shopName || `Shop #${d.shopId}`,
+            area_id: 1,
+            delivery_address: {
+              building: d.deliveryAddress?.address || d.deliveryAddress?.fullAddress || d.deliveryAddress?.building || '',
+              unit: d.deliveryAddress?.unit || '',
+              lat: d.deliveryAddress?.lat || 0,
+              lng: d.deliveryAddress?.lng || 0,
+              recipient_name: d.deliveryAddress?.recipientName || d.deliveryAddress?.recipient_name || '',
+              recipient_phone: d.deliveryAddress?.phoneNumber || d.deliveryAddress?.recipientPhone || d.deliveryAddress?.recipient_phone || '',
+              note: d.deliveryAddress?.note || ''
+            },
+            subtotal: d.subtotal || 0,
+            discount_amount: d.discountAmount || 0,
+            delivery_fee: d.deliveryFee || 0,
+            total_amount: d.totalAmount || 0,
+            payment_method: d.paymentMethod || 'COD',
+            payment_status: d.paymentStatus || 'PENDING',
+            order_status: d.orderStatus || 'PLACED',
+            order_note: d.orderNote,
+            cancel_reason: d.cancelReason,
+            cancelled_by: d.cancelledBy,
+            placed_at: d.placedAt,
+            confirmed_at: d.confirmedAt,
+            ready_at: d.readyAt,
+            completed_at: d.completedAt,
+            items: (d.items || []).map((it: any) => ({
+              id: it.id,
+              item_id: it.itemId,
+              item_name: it.itemName,
+              item_image_url: it.itemImage,
+              unit_price: it.unitPrice,
+              quantity: it.quantity,
+              selected_options: Array.isArray(it.selectedOptions)
+                ? it.selectedOptions.map((opt: any) => ({
+                    group: opt.group,
+                    option: opt.option,
+                    extra_price: opt.extra_price || opt.extraPrice || 0
+                  }))
+                : [],
+              item_note: it.itemNote,
+              total_price: it.totalPrice
+            }))
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch /orders/admin/all, using stored orders', e);
+    }
+    return getStored<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
+  },
+
   updateOrderStatus: async (orderId: number, newStatus: Order['order_status'], actor: string, reason?: string) => {
     try {
-      await fetch(`http://localhost:8083/orders/${orderId}/status`, {
+      await fetch(`http://localhost:8080/api/v1/orders/${orderId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`
+          'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token') || ''}`
         },
         body: JSON.stringify({
           status: newStatus,
@@ -769,6 +957,20 @@ export const dbService = {
 
     setStored(STORAGE_KEYS.ORDERS, updatedOrders);
     setStored(STORAGE_KEYS.ORDER_HISTORY, [newHistoryEntry, ...history]);
+
+    try {
+      const payload = {
+        type: 'ORDER_STATUS_CHANGED',
+        orderId,
+        newStatus,
+        timestamp: Date.now()
+      };
+      const bc = new BroadcastChannel('hyperlocal_orders');
+      bc.postMessage(payload);
+      bc.close();
+      localStorage.setItem('hyperlocal_order_event', JSON.stringify(payload));
+    } catch (e) {}
+
     return updatedOrders;
   },
   getOrderStatusHistory: async (orderId: number) => {
@@ -827,19 +1029,19 @@ export const dbService = {
   getPromotions: async (scope?: 'PLATFORM' | 'SHOP', shopId?: number) => {
     try {
       const url = scope === 'PLATFORM'
-        ? 'http://localhost:8082/promotions/admin'
+        ? 'http://localhost:8080/api/v1/promotions/platform'
         : shopId
-        ? `http://localhost:8082/promotions/shop/${shopId}`
-        : 'http://localhost:8082/promotions/admin';
+        ? `http://localhost:8080/api/v1/promotions/shop/${shopId}`
+        : 'http://localhost:8080/api/v1/promotions/admin';
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           const mapped: Promotion[] = data.map((d: any) => ({
             id: d.id,
             code: d.code,
             promo_type: d.promoType || 'FIXED_AMOUNT',
-            scope: d.scope || 'SHOP',
+            scope: d.scope || (d.shopId ? 'SHOP' : 'PLATFORM'),
             shop_id: d.shopId,
             shop_name: d.shopName,
             area_id: d.areaId,
@@ -861,56 +1063,91 @@ export const dbService = {
         }
       }
     } catch (e) {
-      console.warn('Backend core-service unreachable for promotions, using local storage fallback');
+      console.warn('Backend core-service unreachable for promotions, using local storage fallback', e);
     }
     const list = getStored<Promotion[]>(STORAGE_KEYS.PROMOTIONS, initialPromotions);
-    const missing = initialPromotions.filter((ip) => !list.some((p) => p.id === ip.id));
-    let finalPromos = list;
-    if (missing.length > 0) {
-      finalPromos = [...list, ...missing];
-      setStored(STORAGE_KEYS.PROMOTIONS, finalPromos);
-    }
-    if (scope) return finalPromos.filter(p => p.scope === scope);
-    return finalPromos;
+    if (scope) return list.filter(p => p.scope === scope && (!shopId || p.shop_id === shopId));
+    if (shopId) return list.filter(p => p.shop_id === shopId);
+    return list;
   },
 
   approvePromotion: async (id: number, approved: boolean, reason?: string) => {
     try {
-      await fetch(`http://localhost:8082/promotions/admin/${id}/approve`, {
-        method: 'PUT',
+      await fetch(`http://localhost:8080/api/v1/promotions/admin/${id}/approve?approved=${approved}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approved, rejectionReason: reason })
       });
     } catch (e) {
-      console.warn('Backend core-service unreachable, updating local storage');
+      console.warn('Backend core-service unreachable, updating local storage', e);
     }
     const list = getStored<Promotion[]>(STORAGE_KEYS.PROMOTIONS, initialPromotions);
-    const updated = list.map(p => p.id === id ? { ...p, approval_status: (approved ? 'APPROVED' : 'REJECTED') as Promotion['approval_status'] } : p);
+    const updated = list.map(p => p.id === id ? { ...p, approval_status: (approved ? 'APPROVED' : 'REJECTED') as Promotion['approval_status'], is_active: approved } : p);
     setStored(STORAGE_KEYS.PROMOTIONS, updated);
+
+    // Broadcast real-time event to all tabs/windows
+    try {
+      const payload = {
+        type: approved ? 'PROMOTION_APPROVED' : 'PROMOTION_REJECTED',
+        promoId: id,
+        reason,
+        timestamp: Date.now()
+      };
+      const bc = new BroadcastChannel('hyperlocal_promotions');
+      bc.postMessage(payload);
+      bc.close();
+      localStorage.setItem('hyperlocal_promo_event', JSON.stringify(payload));
+    } catch (e) {}
+
     return updated;
   },
 
   togglePromotion: async (id: number, isActive: boolean) => {
     try {
-      await fetch(`http://localhost:8082/promotions/${id}/toggle`, {
-        method: 'PUT',
+      await fetch(`http://localhost:8080/api/v1/promotions/${id}/toggle?isActive=${isActive}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive })
       });
     } catch (e) {
-      console.warn('Backend core-service unreachable, updating local storage');
+      console.warn('Backend core-service unreachable, updating local storage', e);
     }
     const list = getStored<Promotion[]>(STORAGE_KEYS.PROMOTIONS, initialPromotions);
     const updated = list.map(p => p.id === id ? { ...p, is_active: isActive } : p);
     setStored(STORAGE_KEYS.PROMOTIONS, updated);
+
+    try {
+      const payload = {
+        type: 'PROMOTION_TOGGLED',
+        promoId: id,
+        isActive,
+        timestamp: Date.now()
+      };
+      const bc = new BroadcastChannel('hyperlocal_promotions');
+      bc.postMessage(payload);
+      bc.close();
+      localStorage.setItem('hyperlocal_promo_event', JSON.stringify(payload));
+    } catch (e) {}
+
     return updated;
   },
 
   savePromotion: async (promo: Partial<Promotion>) => {
+    let savedBackendPromo: any = null;
+    const formatValidDate = (dateStr?: string, defaultEnd = false) => {
+      if (!dateStr) {
+        return defaultEnd 
+          ? new Date(Date.now() + 30 * 86400000).toISOString()
+          : new Date().toISOString();
+      }
+      if (dateStr.includes('T')) return dateStr;
+      return defaultEnd ? `${dateStr}T23:59:59Z` : `${dateStr}T00:00:00Z`;
+    };
+
     try {
-      if (promo.id) {
-        // Update existing promotion
-        await fetch(`http://localhost:8082/promotions/${promo.id}`, {
+      if (promo.id && typeof promo.id === 'number' && promo.id < 1000000000) {
+        // Update existing promotion on backend
+        const res = await fetch(`http://localhost:8080/api/v1/promotions/${promo.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -922,12 +1159,13 @@ export const dbService = {
             totalLimit: promo.total_limit,
             perUserLimit: promo.per_user_limit,
             applicableTo: promo.applicable_to,
-            validFrom: promo.valid_from,
-            validUntil: promo.valid_until
+            validFrom: formatValidDate(promo.valid_from, false),
+            validUntil: formatValidDate(promo.valid_until, true)
           })
         });
+        if (res.ok) savedBackendPromo = await res.json();
       } else if (promo.scope === 'PLATFORM') {
-        await fetch('http://localhost:8082/promotions/admin', {
+        const res = await fetch('http://localhost:8080/api/v1/promotions/admin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -939,12 +1177,14 @@ export const dbService = {
             totalLimit: promo.total_limit,
             perUserLimit: promo.per_user_limit,
             applicableTo: promo.applicable_to,
-            validFrom: promo.valid_from,
-            validUntil: promo.valid_until
+            validFrom: formatValidDate(promo.valid_from, false),
+            validUntil: formatValidDate(promo.valid_until, true)
           })
         });
+        if (res.ok) savedBackendPromo = await res.json();
       } else {
-        await fetch(`http://localhost:8082/promotions/shop/${promo.shop_id || 1}`, {
+        const targetShopId = promo.shop_id || 1;
+        const res = await fetch(`http://localhost:8080/api/v1/promotions/shop/${targetShopId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -956,22 +1196,26 @@ export const dbService = {
             totalLimit: promo.total_limit,
             perUserLimit: promo.per_user_limit,
             applicableTo: promo.applicable_to,
-            validFrom: promo.valid_from,
-            validUntil: promo.valid_until
+            validFrom: formatValidDate(promo.valid_from, false),
+            validUntil: formatValidDate(promo.valid_until, true)
           })
         });
+        if (res.ok) savedBackendPromo = await res.json();
       }
     } catch (e) {
-      console.warn('Backend core-service savePromotion unreachable, storing locally');
+      console.warn('Backend core-service savePromotion unreachable, storing locally', e);
     }
 
     const list = getStored<Promotion[]>(STORAGE_KEYS.PROMOTIONS, initialPromotions);
     let updated: Promotion[];
+    let newOrUpdatedPromo: Promotion;
+
     if (promo.id) {
       updated = list.map(p => p.id === promo.id ? { ...p, ...promo } as Promotion : p);
+      newOrUpdatedPromo = { ...promo } as Promotion;
     } else {
-      const newPromo: Promotion = {
-        id: Date.now(),
+      newOrUpdatedPromo = {
+        id: savedBackendPromo?.id || Date.now(),
         code: promo.code || `KM${Date.now()}`,
         promo_type: promo.promo_type || 'FIXED_AMOUNT',
         scope: promo.scope || 'SHOP',
@@ -987,13 +1231,29 @@ export const dbService = {
         applicable_to: promo.applicable_to || 'ALL',
         valid_from: promo.valid_from || new Date().toISOString(),
         valid_until: promo.valid_until || new Date(Date.now() + 30 * 86400000).toISOString(),
-        approval_status: promo.scope === 'PLATFORM' ? 'APPROVED' : 'PENDING',
+        approval_status: savedBackendPromo?.approvalStatus || promo.approval_status || (promo.scope === 'PLATFORM' ? 'APPROVED' : 'PENDING'),
         is_active: true,
         created_at: new Date().toISOString()
       };
-      updated = [...list, newPromo];
+      updated = [newOrUpdatedPromo, ...list];
     }
     setStored(STORAGE_KEYS.PROMOTIONS, updated);
+
+    // Broadcast real-time event to Admin and other components
+    try {
+      const payload = {
+        type: promo.id ? 'PROMOTION_UPDATED' : 'PROMOTION_CREATED',
+        promo: newOrUpdatedPromo,
+        shopName: promo.shop_name || 'Gian hàng',
+        shopId: promo.shop_id,
+        timestamp: Date.now()
+      };
+      const bc = new BroadcastChannel('hyperlocal_promotions');
+      bc.postMessage(payload);
+      bc.close();
+      localStorage.setItem('hyperlocal_promo_event', JSON.stringify(payload));
+    } catch (e) {}
+
     return updated;
   },
 
