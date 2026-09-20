@@ -408,6 +408,40 @@ export const dbService = {
 
   // CATEGORIES
   getCategories: async (shopId: number) => {
+    try {
+      let targetShopId = shopId;
+      const token = localStorage.getItem('hyperlocal_access_token');
+      if (token) {
+        const meRes = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData?.data?.id) {
+            targetShopId = meData.data.id;
+          }
+        }
+      }
+      
+      const res = await fetch(`http://localhost:8080/api/v1/core/shops/${targetShopId}/details`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.categories) {
+          // Map backend CategoryDto to mock Category interface
+          return data.categories.map((c: any) => ({
+            id: c.id,
+            shop_id: targetShopId,
+            name: c.name,
+            description: c.description,
+            image_url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200',
+            sort_order: c.id,
+            is_active: true
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Backend server unreachable for categories, using local storage', e);
+    }
     const cats = getStored<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
     return cats.filter(c => c.shop_id === shopId);
   },
@@ -440,6 +474,51 @@ export const dbService = {
 
   // ITEMS
   getItems: async (shopId: number) => {
+    try {
+      let targetShopId = shopId;
+      const token = localStorage.getItem('hyperlocal_access_token');
+      if (token) {
+        const meRes = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData?.data?.id) {
+            targetShopId = meData.data.id;
+          }
+        }
+      }
+
+      const res = await fetch(`http://localhost:8080/api/v1/core/shops/${targetShopId}/details`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.categories) {
+          const items: Item[] = [];
+          data.categories.forEach((cat: any) => {
+            if (cat.items) {
+              cat.items.forEach((it: any) => {
+                items.push({
+                  id: it.id,
+                  shop_id: targetShopId,
+                  category_id: cat.id,
+                  name: it.name,
+                  description: it.description,
+                  base_price: it.basePrice || it.originalPrice || 0,
+                  image_url: it.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200',
+                  status: it.status,
+                  is_bestseller: false,
+                  sort_order: it.id,
+                  created_at: new Date().toISOString()
+                });
+              });
+            }
+          });
+          return items;
+        }
+      }
+    } catch (e) {
+      console.warn('Backend server unreachable for items, using local storage', e);
+    }
     const items = getStored<Item[]>(STORAGE_KEYS.ITEMS, initialItems);
     return items.filter(i => i.shop_id === shopId);
   },
@@ -555,6 +634,85 @@ export const dbService = {
 
   // ORDERS & FSM
   getOrders: async (filters?: { shop_id?: number; area_id?: number; status?: string }) => {
+    try {
+      let targetShopId = filters?.shop_id;
+      const token = localStorage.getItem('hyperlocal_access_token');
+      if (token) {
+        const meRes = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData?.data?.id) {
+            targetShopId = meData.data.id;
+          }
+        }
+      }
+
+      if (targetShopId) {
+        const res = await fetch(`http://localhost:8080/api/v1/orders/shop/${targetShopId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            let orders: Order[] = data.map((d: any) => ({
+              id: d.id,
+              order_code: d.orderCode,
+              user_id: d.userId,
+              customer_name: d.deliveryAddress?.recipientName || 'Khách vãng lai',
+              customer_phone: d.deliveryAddress?.phoneNumber || d.deliveryAddress?.recipientPhone || '',
+              shop_id: d.shopId,
+              shop_name: d.shopName,
+              area_id: 1, // mock area
+              delivery_address: {
+                building: d.deliveryAddress?.address || d.deliveryAddress?.fullAddress || '',
+                unit: '',
+                lat: 0,
+                lng: 0,
+                recipient_name: d.deliveryAddress?.recipientName || '',
+                recipient_phone: d.deliveryAddress?.phoneNumber || d.deliveryAddress?.recipientPhone || '',
+                note: d.deliveryAddress?.note || ''
+              },
+              subtotal: d.subtotal,
+              discount_amount: d.discountAmount,
+              delivery_fee: d.deliveryFee,
+              total_amount: d.totalAmount,
+              payment_method: d.paymentMethod,
+              payment_status: d.paymentStatus,
+              order_status: d.orderStatus,
+              order_note: d.orderNote,
+              cancel_reason: d.cancelReason,
+              cancelled_by: d.cancelledBy,
+              placed_at: d.placedAt,
+              confirmed_at: d.confirmedAt,
+              ready_at: d.readyAt,
+              completed_at: d.completedAt,
+              items: (d.items || []).map((it: any) => ({
+                id: it.id,
+                item_id: it.itemId,
+                item_name: it.itemName,
+                item_image_url: it.itemImage,
+                unit_price: it.unitPrice,
+                quantity: it.quantity,
+                selected_options: (it.selectedOptions || []).map((opt: any) => ({
+                  group: opt.group,
+                  option: opt.option,
+                  extra_price: opt.extra_price || opt.extraPrice || 0
+                })),
+                item_note: it.itemNote,
+                total_price: it.totalPrice
+              }))
+            }));
+            
+            if (filters?.area_id) orders = orders.filter(o => o.area_id === filters.area_id);
+            if (filters?.status) orders = orders.filter(o => o.order_status === filters.status);
+            return orders;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Backend server unreachable for orders, using local storage', e);
+    }
+
     let orders = getStored<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
     if (filters?.shop_id) orders = orders.filter(o => o.shop_id === filters.shop_id);
     if (filters?.area_id) orders = orders.filter(o => o.area_id === filters.area_id);
