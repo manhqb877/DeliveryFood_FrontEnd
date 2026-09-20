@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthGuard';
 import { dbService } from '@/api/client';
 import { ShopProfile } from '@/api/mockData';
@@ -29,12 +29,16 @@ interface MenuGroup {
 }
 
 export function ShopLayout() {
+  const navigate = useNavigate();
   const { currentUser, setRole, logout } = useAuth();
   const [shop, setShop] = useState<ShopProfile | null>(null);
 
   useEffect(() => {
-    dbService.getShopById(1).then((s) => setShop(s));
-  }, []);
+    dbService.getShops().then((shops) => {
+      const myShop = shops.find((s) => s.owner_id === currentUser?.id);
+      setShop(myShop || shops[0]);
+    });
+  }, [currentUser?.id]);
 
   const toggleIsOpen = async () => {
     if (!shop) return;
@@ -150,7 +154,10 @@ export function ShopLayout() {
             </div>
 
             <button
-              onClick={logout}
+              onClick={() => {
+                logout();
+                navigate('/login');
+              }}
               title="Đăng xuất"
               className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
             >
