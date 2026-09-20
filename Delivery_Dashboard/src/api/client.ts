@@ -17,6 +17,9 @@ import {
   initialTransactions,
   initialPromotions,
   initialReviews,
+  initialPayoutSchedules,
+  initialPromotionRedemptions,
+  initialCommissionRecords,
   User,
   Area,
   IntraZoneNode,
@@ -34,7 +37,10 @@ import {
   CodRecord,
   Transaction,
   Promotion,
-  Review
+  Review,
+  PlatformPayoutSchedule,
+  PromotionRedemption,
+  CommissionRecord
 } from './mockData';
 
 // Storage keys
@@ -56,8 +62,12 @@ const STORAGE_KEYS = {
   COD_RECORDS: 'hyperlocal_cod_records',
   TRANSACTIONS: 'hyperlocal_transactions',
   PROMOTIONS: 'hyperlocal_promotions',
+  PROMOTION_REDEMPTIONS: 'hyperlocal_promotion_redemptions',
+  PAYOUT_SCHEDULES: 'hyperlocal_payout_schedules',
+  COMMISSION_RECORDS: 'hyperlocal_commission_records',
   REVIEWS: 'hyperlocal_reviews',
 };
+
 
 function getStored<T>(key: string, defaultVal: T): T {
   try {
@@ -90,7 +100,17 @@ export function generateIdempotencyKey(): string {
 
 export const dbService = {
   // USERS
-  getUsers: async () => getStored<User[]>(STORAGE_KEYS.USERS, initialUsers),
+  getUsers: async () => {
+    const stored = getStored<User[]>(STORAGE_KEYS.USERS, initialUsers);
+    // Ensure all initial users exist in stored list
+    const missing = initialUsers.filter((iu) => !stored.some((su) => su.phone === iu.phone));
+    if (missing.length > 0) {
+      const merged = [...stored, ...missing];
+      setStored(STORAGE_KEYS.USERS, merged);
+      return merged;
+    }
+    return stored;
+  },
   updateUserStatus: async (userId: number, status: User['status']) => {
     const users = getStored<User[]>(STORAGE_KEYS.USERS, initialUsers);
     const updated = users.map(u => u.id === userId ? { ...u, status } : u);
@@ -106,8 +126,12 @@ export const dbService = {
   },
   approveShop: async (shopId: number, approved: boolean, reason?: string) => {
     const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
-    const updated = shops.map(s => {
+    const users = getStored<User[]>(STORAGE_KEYS.USERS, initialUsers);
+    let targetOwnerId: number | undefined;
+
+    const updatedShops = shops.map(s => {
       if (s.id === shopId) {
+        targetOwnerId = s.owner_id;
         return {
           ...s,
           approval_status: (approved ? 'APPROVED' : 'REJECTED') as ShopProfile['approval_status'],
@@ -119,12 +143,189 @@ export const dbService = {
       }
       return s;
     });
-    setStored(STORAGE_KEYS.SHOPS, updated);
-    return updated;
+
+    if (targetOwnerId) {
+      const updatedUsers = users.map(u => {
+        if (u.id === targetOwnerId) {
+          return {
+            ...u,
+            status: (approved ? 'ACTIVE' : 'LOCKED') as User['status']
+          };
+        }
+        return u;
+      });
+      setStored(STORAGE_KEYS.USERS, updatedUsers);
+    }
+
+    setStored(STORAGE_KEYS.SHOPS, updatedShops);
+    return updatedShops;
+  },
+  registerShop: async (payload: {
+    // Owner Info
+    owner_name: string;
+    phone: string;
+    email: string;
+    // Shop Details
+    shop_name: string;
+    shop_type?: 'COM_TRUA' | 'THUC_UONG' | 'AN_VUNG' | 'BANH' | 'KHAC';
+    shop_description: string;
+    area_id: number;
+    area_name?: string;
+    location_detail: string;
+    building_code?: string;
+    floor?: string;
+    unit_number?: string;
+    // Contact & Media
+    logo_url?: string;
+    cover_image_url?: string;
+    business_license_number?: string;
+    food_safety_cert_number?: string;
+    tax_id?: string;
+    documents?: string[];
+    // Hours & Ops
+    business_hours?: Array<{ day: number; open: string; close: string; is_closed: boolean }>;
+    avg_prep_time_minutes?: number;
+    min_order_value?: number;
+  }) => {
+    const users = getStored<User[]>(STORAGE_KEYS.USERS, initialUsers);
+    const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
+    const areas = getStored<Area[]>(STORAGE_KEYS.AREAS, initialAreas);
+
+    const newUserId = Date.now();
+    const newShopId = Date.now() + 1;
+
+    const selectedArea = areas.find(a => a.id === payload.area_id) || areas[0];
+
+    const newUser: User = {
+      id: newUserId,
+      phone: payload.phone,
+      email: payload.email,
+      full_name: payload.owner_name,
+      role: 'SHOP_MANAGER',
+      status: 'PENDING',
+      area_id: payload.area_id,
+      is_area_verified: true,
+      created_at: new Date().toISOString()
+    };
+
+    const newShop: ShopProfile = {
+      id: newShopId,
+      owner_id: newUserId,
+      owner_name: payload.owner_name,
+      area_id: payload.area_id,
+      area_name: payload.area_name || selectedArea.area_name,
+      location_detail: payload.location_detail,
+      building_code: payload.building_code || 'SH-01',
+      floor: payload.floor || 'Tầng 1',
+      unit_number: payload.unit_number || 'SH-01',
+      shop_lat: selectedArea.center_lat,
+      shop_lng: selectedArea.center_lng,
+      shop_name: payload.shop_name,
+      shop_type: payload.shop_type || 'COM_TRUA',
+      shop_description: payload.shop_description || 'Mô tả gian hàng',
+      logo_url: payload.logo_url || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=300',
+      cover_image_url: payload.cover_image_url || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800',
+      phone: payload.phone,
+      email: payload.email,
+      business_license_number: payload.business_license_number || 'HKD-' + Date.now(),
+      food_safety_cert_number: payload.food_safety_cert_number || 'ATTP-' + Date.now(),
+      tax_id: payload.tax_id || 'MST-' + Date.now(),
+      business_hours: payload.business_hours || [
+        { day: 0, open: '08:00', close: '21:00', is_closed: false },
+        { day: 1, open: '07:00', close: '21:30', is_closed: false },
+        { day: 2, open: '07:00', close: '21:30', is_closed: false },
+        { day: 3, open: '07:00', close: '21:30', is_closed: false },
+        { day: 4, open: '07:00', close: '21:30', is_closed: false },
+        { day: 5, open: '07:00', close: '21:30', is_closed: false },
+        { day: 6, open: '07:30', close: '22:00', is_closed: false }
+      ],
+      approval_status: 'PENDING',
+      is_open: false,
+      is_accepting_orders: false,
+      max_concurrent_orders: 15,
+      avg_prep_time_minutes: payload.avg_prep_time_minutes || 15,
+      min_order_value: payload.min_order_value || 30000,
+      commission_rate: 15.0,
+      shipper_model: 'PLATFORM',
+      documents: payload.documents && payload.documents.length > 0 ? payload.documents : ['https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=500'],
+      created_at: new Date().toISOString(),
+      avg_rating: 5.0,
+      total_reviews: 0
+    };
+
+    setStored(STORAGE_KEYS.USERS, [newUser, ...users]);
+    setStored(STORAGE_KEYS.SHOPS, [newShop, ...shops]);
+
+    return { user: newUser, shop: newShop };
   },
   updateShopProfile: async (shopId: number, data: Partial<ShopProfile>) => {
+    // Try calling backend API if auth token exists
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      try {
+        const res = await fetch('http://localhost:8081/api/v1/auth/shops/me', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            shopName: data.shop_name,
+            shopDescription: data.shop_description,
+            logoUrl: data.logo_url,
+            coverImageUrl: data.cover_image_url,
+            phone: data.phone,
+            locationDetail: data.location_detail,
+            businessHours: data.business_hours,
+            isOpen: data.is_open,
+            isAcceptingOrders: data.is_accepting_orders
+          })
+        });
+        if (res.ok) {
+          const apiRes = await res.json();
+          console.log('Backend profile updated:', apiRes);
+        }
+      } catch (err) {
+        console.warn('Backend server unreachable, using local storage', err);
+      }
+    }
+
     const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
     const updated = shops.map(s => s.id === shopId ? { ...s, ...data } : s);
+    setStored(STORAGE_KEYS.SHOPS, updated);
+    return updated.find(s => s.id === shopId);
+  },
+  toggleShopOpenStatus: async (shopId: number, isOpen: boolean) => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      try {
+        await fetch(`http://localhost:8081/api/v1/auth/shops/me/open?isOpen=${isOpen}`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } catch (err) {
+        console.warn('Backend server unreachable, updating local storage', err);
+      }
+    }
+    const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
+    const updated = shops.map(s => s.id === shopId ? { ...s, is_open: isOpen } : s);
+    setStored(STORAGE_KEYS.SHOPS, updated);
+    return updated.find(s => s.id === shopId);
+  },
+  toggleShopAcceptingOrders: async (shopId: number, isAcceptingOrders: boolean) => {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      try {
+        await fetch(`http://localhost:8081/api/v1/auth/shops/me/accepting?isAcceptingOrders=${isAcceptingOrders}`, {
+          method: 'PATCH',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } catch (err) {
+        console.warn('Backend server unreachable, updating local storage', err);
+      }
+    }
+    const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
+    const updated = shops.map(s => s.id === shopId ? { ...s, is_accepting_orders: isAcceptingOrders } : s);
     setStored(STORAGE_KEYS.SHOPS, updated);
     return updated.find(s => s.id === shopId);
   },
@@ -361,6 +562,23 @@ export const dbService = {
     return orders;
   },
   updateOrderStatus: async (orderId: number, newStatus: Order['order_status'], actor: string, reason?: string) => {
+    try {
+      await fetch(`http://localhost:8083/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`
+        },
+        body: JSON.stringify({
+          status: newStatus,
+          cancelReason: reason,
+          actorType: actor
+        })
+      });
+    } catch (err) {
+      console.warn('Backend order-service unreachable, updating local storage', err);
+    }
+
     const orders = getStored<Order[]>(STORAGE_KEYS.ORDERS, initialOrders);
     const history = getStored<OrderStatusHistory[]>(STORAGE_KEYS.ORDER_HISTORY, initialOrderStatusHistory);
     let oldStatus: string | undefined;
@@ -447,19 +665,148 @@ export const dbService = {
 
   getTransactions: async () => getStored<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions),
 
-  // PROMOTIONS
-  getPromotions: async (scope?: 'PLATFORM' | 'SHOP') => {
+  // PROMOTIONS (M-SHOP-05 & M-ADM-05 Anti-Abuse)
+  getPromotions: async (scope?: 'PLATFORM' | 'SHOP', shopId?: number) => {
+    try {
+      const url = scope === 'PLATFORM'
+        ? 'http://localhost:8082/promotions/admin'
+        : shopId
+        ? `http://localhost:8082/promotions/shop/${shopId}`
+        : 'http://localhost:8082/promotions/admin';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: Promotion[] = data.map((d: any) => ({
+            id: d.id,
+            code: d.code,
+            promo_type: d.promoType || 'FIXED_AMOUNT',
+            scope: d.scope || 'SHOP',
+            shop_id: d.shopId,
+            shop_name: d.shopName,
+            area_id: d.areaId,
+            area_name: d.areaName,
+            discount_value: d.discountValue,
+            min_order_value: d.minOrderValue,
+            max_discount_amount: d.maxDiscountAmount,
+            total_limit: d.totalLimit,
+            used_count: d.usedCount || 0,
+            per_user_limit: d.perUserLimit || 1,
+            applicable_to: d.applicableTo || 'ALL',
+            valid_from: d.validFrom,
+            valid_until: d.validUntil,
+            approval_status: d.approvalStatus || 'PENDING',
+            is_active: d.isActive !== false,
+            created_at: d.createdAt || new Date().toISOString()
+          }));
+          return mapped;
+        }
+      }
+    } catch (e) {
+      console.warn('Backend core-service unreachable for promotions, using local storage fallback');
+    }
     const list = getStored<Promotion[]>(STORAGE_KEYS.PROMOTIONS, initialPromotions);
-    if (scope) return list.filter(p => p.scope === scope);
-    return list;
+    const missing = initialPromotions.filter((ip) => !list.some((p) => p.id === ip.id));
+    let finalPromos = list;
+    if (missing.length > 0) {
+      finalPromos = [...list, ...missing];
+      setStored(STORAGE_KEYS.PROMOTIONS, finalPromos);
+    }
+    if (scope) return finalPromos.filter(p => p.scope === scope);
+    return finalPromos;
   },
-  approvePromotion: async (id: number, approved: boolean) => {
+
+  approvePromotion: async (id: number, approved: boolean, reason?: string) => {
+    try {
+      await fetch(`http://localhost:8082/promotions/admin/${id}/approve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved, rejectionReason: reason })
+      });
+    } catch (e) {
+      console.warn('Backend core-service unreachable, updating local storage');
+    }
     const list = getStored<Promotion[]>(STORAGE_KEYS.PROMOTIONS, initialPromotions);
     const updated = list.map(p => p.id === id ? { ...p, approval_status: (approved ? 'APPROVED' : 'REJECTED') as Promotion['approval_status'] } : p);
     setStored(STORAGE_KEYS.PROMOTIONS, updated);
     return updated;
   },
+
+  togglePromotion: async (id: number, isActive: boolean) => {
+    try {
+      await fetch(`http://localhost:8082/promotions/${id}/toggle`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive })
+      });
+    } catch (e) {
+      console.warn('Backend core-service unreachable, updating local storage');
+    }
+    const list = getStored<Promotion[]>(STORAGE_KEYS.PROMOTIONS, initialPromotions);
+    const updated = list.map(p => p.id === id ? { ...p, is_active: isActive } : p);
+    setStored(STORAGE_KEYS.PROMOTIONS, updated);
+    return updated;
+  },
+
   savePromotion: async (promo: Partial<Promotion>) => {
+    try {
+      if (promo.id) {
+        // Update existing promotion
+        await fetch(`http://localhost:8082/promotions/${promo.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: promo.code,
+            promoType: promo.promo_type,
+            discountValue: promo.discount_value,
+            minOrderValue: promo.min_order_value,
+            maxDiscountAmount: promo.max_discount_amount,
+            totalLimit: promo.total_limit,
+            perUserLimit: promo.per_user_limit,
+            applicableTo: promo.applicable_to,
+            validFrom: promo.valid_from,
+            validUntil: promo.valid_until
+          })
+        });
+      } else if (promo.scope === 'PLATFORM') {
+        await fetch('http://localhost:8082/promotions/admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: promo.code,
+            promoType: promo.promo_type,
+            discountValue: promo.discount_value,
+            minOrderValue: promo.min_order_value,
+            maxDiscountAmount: promo.max_discount_amount,
+            totalLimit: promo.total_limit,
+            perUserLimit: promo.per_user_limit,
+            applicableTo: promo.applicable_to,
+            validFrom: promo.valid_from,
+            validUntil: promo.valid_until
+          })
+        });
+      } else {
+        await fetch(`http://localhost:8082/promotions/shop/${promo.shop_id || 1}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: promo.code,
+            promoType: promo.promo_type,
+            discountValue: promo.discount_value,
+            minOrderValue: promo.min_order_value,
+            maxDiscountAmount: promo.max_discount_amount,
+            totalLimit: promo.total_limit,
+            perUserLimit: promo.per_user_limit,
+            applicableTo: promo.applicable_to,
+            validFrom: promo.valid_from,
+            validUntil: promo.valid_until
+          })
+        });
+      }
+    } catch (e) {
+      console.warn('Backend core-service savePromotion unreachable, storing locally');
+    }
+
     const list = getStored<Promotion[]>(STORAGE_KEYS.PROMOTIONS, initialPromotions);
     let updated: Promotion[];
     if (promo.id) {
@@ -492,16 +839,184 @@ export const dbService = {
     return updated;
   },
 
-  // REVIEWS
-  getReviews: async (shopId?: number) => {
+  // ANTI-ABUSE VALIDATION ENGINE (M-SHOP-05: Chống lạm dụng khuyến mãi)
+  validatePromotion: async (payload: { code: string; shopId: number; userId: number; orderValue: number }): Promise<{
+    valid: boolean;
+    discountAmount?: number;
+    finalAmount?: number;
+    message: string;
+  }> => {
+    try {
+      const res = await fetch('http://localhost:8082/promotions/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: payload.code,
+          shopId: payload.shopId,
+          userId: payload.userId,
+          orderValue: payload.orderValue
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          valid: data.valid,
+          discountAmount: data.discountAmount,
+          finalAmount: data.finalAmount,
+          message: data.message
+        };
+      }
+    } catch (e) {
+      console.warn('Backend validatePromotion unreachable, using local anti-abuse simulation');
+    }
+
+    // Client-side Anti-Abuse simulation
+    const promos = getStored<Promotion[]>(STORAGE_KEYS.PROMOTIONS, initialPromotions);
+    const redemptions = getStored<PromotionRedemption[]>(STORAGE_KEYS.PROMOTION_REDEMPTIONS, initialPromotionRedemptions);
+    const p = promos.find(item => item.code.toUpperCase() === payload.code.toUpperCase());
+
+    if (!p) {
+      return { valid: false, message: 'Mã khuyến mãi không tồn tại trong hệ thống!' };
+    }
+    if (!p.is_active) {
+      return { valid: false, message: 'Mã khuyến mãi hiện đang bị tạm dừng hoạt động!' };
+    }
+    if (p.approval_status !== 'APPROVED') {
+      return { valid: false, message: 'Mã khuyến mãi chưa được Admin sàn kiểm duyệt!' };
+    }
+    if (p.scope === 'SHOP' && p.shop_id && p.shop_id !== payload.shopId) {
+      return { valid: false, message: 'Mã khuyến mãi này áp dụng riêng cho gian hàng khác!' };
+    }
+    if (payload.orderValue < p.min_order_value) {
+      return {
+        valid: false,
+        message: `Đơn hàng (${payload.orderValue.toLocaleString()} ₫) chưa đạt giá trị tối thiểu (${p.min_order_value.toLocaleString()} ₫) để áp dụng voucher!`
+      };
+    }
+    if (p.total_limit && p.used_count >= p.total_limit) {
+      return {
+        valid: false,
+        message: `Mã khuyến mãi đã HẾT LƯỢT phát hành (${p.used_count}/${p.total_limit} mã). Hệ thống chống vượt ngân sách gian hàng đã kích hoạt!`
+      };
+    }
+    const userUsedCount = redemptions.filter(r => r.promotion_code === p.code && r.user_id === payload.userId).length;
+    if (p.per_user_limit && userUsedCount >= p.per_user_limit) {
+      return {
+        valid: false,
+        message: `Khách hàng đã đạt tối đa số lượt dùng mã này (${userUsedCount}/${p.per_user_limit} lượt). Hệ thống chống lạm dụng voucher đã chặn đặt hàng!`
+      };
+    }
+
+    let discount = 0;
+    if (p.promo_type === 'FIXED_AMOUNT') {
+      discount = p.discount_value;
+    } else if (p.promo_type === 'PERCENT') {
+      discount = (payload.orderValue * p.discount_value) / 100;
+      if (p.max_discount_amount && discount > p.max_discount_amount) {
+        discount = p.max_discount_amount;
+      }
+    } else if (p.promo_type === 'FREE_DELIVERY') {
+      discount = 15000;
+    }
+
+    return {
+      valid: true,
+      discountAmount: discount,
+      finalAmount: Math.max(0, payload.orderValue - discount),
+      message: `Áp dụng mã thành công! Giảm ${discount.toLocaleString()} ₫.`
+    };
+  },
+
+  getPromotionRedemptions: async (promotionId?: number): Promise<PromotionRedemption[]> => {
+    try {
+      if (promotionId) {
+        const res = await fetch(`http://localhost:8082/promotions/${promotionId}/redemptions`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            return data.map((d: any) => ({
+              id: d.id,
+              promotion_id: d.promotionId,
+              promotion_code: d.promotionCode,
+              order_id: d.orderId,
+              order_code: d.orderCode || `ORD-${d.orderId}`,
+              user_id: d.userId,
+              user_name: d.userName || `Khách hàng #${d.userId}`,
+              user_phone: d.userPhone || '090xxxxxxx',
+              order_value: d.orderValue,
+              discount_amount: d.discountAmount,
+              used_at: d.usedAt
+            }));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Backend core-service redemptions unreachable, using local data');
+    }
+    const list = getStored<PromotionRedemption[]>(STORAGE_KEYS.PROMOTION_REDEMPTIONS, initialPromotionRedemptions);
+    if (promotionId) return list.filter(r => r.promotion_id === promotionId);
+    return list;
+  },
+
+  // REVENUE & SETTLEMENT & PAYOUT (M-SHOP-04)
+  getPayoutSchedules: async (): Promise<PlatformPayoutSchedule[]> => {
+    return getStored<PlatformPayoutSchedule[]>(STORAGE_KEYS.PAYOUT_SCHEDULES, initialPayoutSchedules);
+  },
+
+  getCommissionRecords: async (period?: string): Promise<CommissionRecord[]> => {
+    const list = getStored<CommissionRecord[]>(STORAGE_KEYS.COMMISSION_RECORDS, initialCommissionRecords);
+    if (period && period !== 'ALL') return list.filter(r => r.settlement_period === period);
+    return list;
+  },
+
+  // REVIEWS (M-SHOP-05)
+  getReviews: async (shopId?: number): Promise<Review[]> => {
+    try {
+      const res = await fetch(`http://localhost:8083/reviews/shop/${shopId || 1}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data.map((d: any) => ({
+            id: d.id,
+            order_id: d.orderId,
+            order_code: d.orderCode || `ORD-${d.orderId}`,
+            user_name: d.userName || 'Khách hàng',
+            user_phone: d.userPhone,
+            user_avatar: d.userAvatar,
+            shop_id: d.shopId,
+            shop_rating: d.shopRating,
+            shop_comment: d.shopComment,
+            food_rating: d.foodRating,
+            delivery_rating: d.deliveryRating,
+            image_urls: d.imageUrls || [],
+            shop_reply: d.shopReply,
+            shop_replied_at: d.shopRepliedAt,
+            created_at: d.createdAt
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Backend order-service reviews unreachable, using local storage');
+    }
     const list = getStored<Review[]>(STORAGE_KEYS.REVIEWS, initialReviews);
     if (shopId) return list.filter(r => r.shop_id === shopId);
     return list;
   },
+
   replyReview: async (reviewId: number, shopReply: string) => {
+    try {
+      await fetch(`http://localhost:8083/reviews/${reviewId}/reply`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopReply })
+      });
+    } catch (e) {
+      console.warn('Backend order-service review reply unreachable, using local storage');
+    }
     const list = getStored<Review[]>(STORAGE_KEYS.REVIEWS, initialReviews);
     const updated = list.map(r => r.id === reviewId ? { ...r, shop_reply: shopReply, shop_replied_at: new Date().toISOString() } : r);
     setStored(STORAGE_KEYS.REVIEWS, updated);
     return updated;
   }
 };
+
