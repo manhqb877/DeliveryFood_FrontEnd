@@ -206,7 +206,19 @@ export const dbService = {
       }
     }
 
-    // 3. Fallback to local storage
+    // 3. Fallback to first shop in real backend
+    try {
+      const res = await fetch('http://localhost:8080/api/v1/core/shops');
+      if (res.ok) {
+        const shopsList = await res.json();
+        if (Array.isArray(shopsList) && shopsList.length > 0) {
+          return mapBackendShopToProfile(shopsList[0]);
+        }
+      }
+    } catch (err) {
+      console.warn('Fallback to real backend shops failed:', err);
+    }
+
     const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
     if (currentUser?.id) {
       const localFound = shops.find(s => s.owner_id === currentUser.id);
@@ -541,53 +553,53 @@ export const dbService = {
         }
       }
       
-      const res = await fetch(`http://localhost:8080/api/v1/core/shops/${targetShopId}/details`);
+      const res = await fetch(`http://localhost:8080/api/v1/core/categories/shop/${targetShopId}`);
       if (res.ok) {
-        const data = await res.json();
-        if (data && data.categories) {
-          // Map backend CategoryDto to mock Category interface
-          return data.categories.map((c: any) => ({
-            id: c.id,
-            shop_id: targetShopId,
-            name: c.name,
-            description: c.description,
-            image_url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200',
-            sort_order: c.id,
-            is_active: true
-          }));
+        const json = await res.json();
+        if (json.data) {
+          return json.data;
         }
       }
     } catch (e) {
-      console.warn('Backend server unreachable for categories, using local storage', e);
+      console.warn('Backend server unreachable for categories', e);
     }
-    const cats = getStored<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
-    return cats.filter(c => c.shop_id === shopId);
+    return [];
   },
   saveCategory: async (category: Partial<Category>) => {
-    const cats = getStored<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
-    let updated: Category[];
-    if (category.id) {
-      updated = cats.map(c => c.id === category.id ? { ...c, ...category } as Category : c);
-    } else {
-      const newCat: Category = {
-        id: Date.now(),
-        shop_id: category.shop_id || 1,
-        name: category.name || 'Danh mục mới',
-        description: category.description || '',
-        image_url: category.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200',
-        sort_order: category.sort_order || 1,
-        is_active: true
-      };
-      updated = [...cats, newCat];
+    try {
+      const isUpdate = !!category.id;
+      const url = isUpdate 
+        ? `http://localhost:8080/api/v1/core/categories/${category.id}` 
+        : `http://localhost:8080/api/v1/core/categories`;
+      const method = isUpdate ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(category)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.data;
+      }
+      console.warn('Failed to save category', await res.text());
+    } catch (e) {
+      console.error(e);
     }
-    setStored(STORAGE_KEYS.CATEGORIES, updated);
-    return updated;
+    return null;
   },
   deleteCategory: async (id: number) => {
-    const cats = getStored<Category[]>(STORAGE_KEYS.CATEGORIES, initialCategories);
-    const updated = cats.filter(c => c.id !== id);
-    setStored(STORAGE_KEYS.CATEGORIES, updated);
-    return updated;
+    try {
+      const res = await fetch(`http://localhost:8080/api/v1/core/categories/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        return true;
+      }
+    } catch(e) {
+      console.error(e);
+    }
+    return false;
   },
 
   // ITEMS
@@ -622,14 +634,16 @@ export const dbService = {
                   name: it.name,
                   description: it.description,
                   base_price: it.basePrice || it.originalPrice || 0,
+                  discount_price: it.discountPrice,
                   image_url: it.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200',
                   status: it.status,
                   daily_sold: it.dailySold || 0,
+                  daily_limit: it.dailyLimit,
                   prep_time_minutes: it.prepTimeMinutes || 15,
                   tags: it.tags || [],
                   avg_rating: it.avgRating || 5.0,
                   total_reviews: it.totalReviews || 0,
-                  sort_order: it.id,
+                  sort_order: it.sortOrder !== undefined ? it.sortOrder : it.id,
                   created_at: new Date().toISOString()
                 });
               });
@@ -649,12 +663,69 @@ export const dbService = {
     return items.find(i => i.id === id);
   },
   toggleItemStatus: async (itemId: number, newStatus: Item['status']) => {
+    try {
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data;
+      }
+    } catch (e) {
+      console.warn('Backend server unreachable', e);
+    }
     const items = getStored<Item[]>(STORAGE_KEYS.ITEMS, initialItems);
     const updated = items.map(i => i.id === itemId ? { ...i, status: newStatus } : i);
     setStored(STORAGE_KEYS.ITEMS, updated);
     return updated;
   },
+  deleteItem: async (itemId: number) => {
+    try {
+      const url = `http://localhost:8080/api/v1/core/items/${itemId}`;
+      await fetch(url, {
+        method: "DELETE",
+      });
+    } catch(e) {}
+    const items = getStored<Item[]>(STORAGE_KEYS.ITEMS, initialItems);
+    const updated = items.filter(i => i.id !== itemId);
+    setStored(STORAGE_KEYS.ITEMS, updated);
+  },
   saveItem: async (item: Partial<Item>) => {
+    try {
+      const isUpdate = !!item.id;
+      const url = isUpdate 
+        ? `http://localhost:8080/api/v1/core/items/${item.id}`
+        : `http://localhost:8080/api/v1/core/items`;
+      const method = isUpdate ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopId: item.shop_id,
+          categoryId: item.category_id,
+          name: item.name,
+          description: item.description,
+          imageUrl: item.image_url,
+          basePrice: item.base_price,
+          discountPrice: item.discount_price,
+          status: item.status,
+          dailyLimit: item.daily_limit,
+          prepTimeMinutes: item.prep_time_minutes,
+          tags: item.tags,
+          sortOrder: item.sort_order
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data;
+      }
+    } catch (e) {
+      console.warn('Failed to save item to backend', e);
+    }
+    // Fallback
     const items = getStored<Item[]>(STORAGE_KEYS.ITEMS, initialItems);
     let updated: Item[];
     if (item.id) {
@@ -680,7 +751,7 @@ export const dbService = {
       updated = [...items, newItem];
     }
     setStored(STORAGE_KEYS.ITEMS, updated);
-    return updated;
+    return item.id ? updated.find(i => i.id === item.id) : updated[updated.length - 1];
   },
 
   // ITEM PRICES
@@ -722,10 +793,69 @@ export const dbService = {
 
   // ITEM OPTIONS
   getItemOptions: async (itemId: number) => {
+    try {
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/${itemId}/options`);
+      if (res.ok) {
+        const list = await res.json();
+        return list.map((o: any) => ({
+          id: o.id,
+          item_id: itemId,
+          group_name: o.groupName || o.group_name,
+          option_name: o.optionName || o.option_name,
+          extra_price: o.extraPrice || o.extra_price,
+          is_required: o.isRequired || o.is_required,
+          is_multiple: o.isMultiple || o.is_multiple,
+          max_select: o.maxSelect || o.max_select,
+          is_active: true
+        }));
+      }
+    } catch (e) {
+      console.warn('Backend server unreachable', e);
+    }
     const options = getStored<ItemOption[]>(STORAGE_KEYS.ITEM_OPTIONS, initialItemOptions);
     return options.filter(o => o.item_id === itemId);
   },
+  getSuggestedOptionsByCategory: async (categoryId: number) => {
+    try {
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/category/${categoryId}/suggested-options`);
+      if (res.ok) {
+        const body = await res.json();
+        const arr = Array.isArray(body) ? body : (body?.data && Array.isArray(body.data) ? body.data : []);
+        return arr.map((opt: any) => ({
+          group_name: opt.groupName,
+          option_name: opt.optionName,
+          extra_price: opt.extraPrice,
+          is_required: opt.isRequired,
+          is_multiple: opt.isMultiple,
+          max_select: opt.maxSelect,
+          sort_order: opt.sortOrder
+        }));
+      }
+    } catch(e) {}
+    return [];
+  },
   saveItemOption: async (option: Partial<ItemOption>) => {
+    try {
+      const url = `http://localhost:8080/api/v1/core/items/${option.item_id}/options`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupName: option.group_name,
+          optionName: option.option_name,
+          extraPrice: option.extra_price,
+          isRequired: option.is_required,
+          isMultiple: option.is_multiple,
+          maxSelect: option.max_select
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
+      }
+    } catch (e) {
+      console.warn('Failed to save option to backend', e);
+    }
     const options = getStored<ItemOption[]>(STORAGE_KEYS.ITEM_OPTIONS, initialItemOptions);
     let updated: ItemOption[];
     if (option.id) {
@@ -748,6 +878,11 @@ export const dbService = {
     return updated;
   },
   deleteItemOption: async (id: number) => {
+    try {
+      await fetch(`http://localhost:8080/api/v1/core/items/options/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      console.warn('Failed to delete option from backend', e);
+    }
     const options = getStored<ItemOption[]>(STORAGE_KEYS.ITEM_OPTIONS, initialItemOptions);
     const updated = options.filter(o => o.id !== id);
     setStored(STORAGE_KEYS.ITEM_OPTIONS, updated);
@@ -1435,6 +1570,61 @@ export const dbService = {
     const updated = list.map(r => r.id === reviewId ? { ...r, shop_reply: shopReply, shop_replied_at: new Date().toISOString() } : r);
     setStored(STORAGE_KEYS.REVIEWS, updated);
     return updated;
+  },
+  addBulkCategoryOption: async (categoryId: number, optionData: any) => {
+    try {
+      const payload = {
+        groupName: optionData.group_name,
+        optionName: optionData.option_name,
+        extraPrice: optionData.extra_price,
+        isRequired: optionData.is_required,
+        isMultiple: optionData.is_multiple,
+        maxSelect: optionData.max_select,
+        sortOrder: optionData.sort_order
+      };
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/category/${categoryId}/bulk-options`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return res.ok;
+    } catch(e) {
+      return false;
+    }
+  },
+  updateBulkCategoryOption: async (categoryId: number, oldGroupName: string, oldOptionName: string, newOptionData: any) => {
+    try {
+      const newOptionPayload = {
+        groupName: newOptionData.group_name,
+        optionName: newOptionData.option_name,
+        extraPrice: newOptionData.extra_price,
+        isRequired: newOptionData.is_required,
+        isMultiple: newOptionData.is_multiple,
+        maxSelect: newOptionData.max_select,
+        sortOrder: newOptionData.sort_order
+      };
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/category/${categoryId}/bulk-options`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          oldGroupName: oldGroupName,
+          oldOptionName: oldOptionName,
+          newOption: newOptionPayload
+        })
+      });
+      return res.ok;
+    } catch(e) {
+      return false;
+    }
+  },
+  deleteBulkCategoryOption: async (categoryId: number, groupName: string, optionName: string) => {
+    try {
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/category/${categoryId}/bulk-options?groupName=${encodeURIComponent(groupName)}&optionName=${encodeURIComponent(optionName)}`, {
+        method: 'DELETE'
+      });
+      return res.ok;
+    } catch(e) {
+      return false;
+    }
   }
 };
-

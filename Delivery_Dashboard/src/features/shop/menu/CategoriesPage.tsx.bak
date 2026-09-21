@@ -399,7 +399,7 @@ export function CategoriesPage() {
                 type="text"
                 list="existing-group-names-categories"
                 value={editingOption.group_name}
-                onChange={(e) => setEditingOption((p: any) => ({ ...p, group_name: e.target.value }))}
+                onChange={(e) => setEditingOption(p => ({ ...p, group_name: e.target.value }))}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
               />
               <datalist id="existing-group-names-categories">
@@ -413,7 +413,7 @@ export function CategoriesPage() {
               <input
                 type="text"
                 value={editingOption.option_name}
-                onChange={(e) => setEditingOption((p: any) => ({ ...p, option_name: e.target.value }))}
+                onChange={(e) => setEditingOption(p => ({ ...p, option_name: e.target.value }))}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
               />
             </div>
@@ -424,7 +424,7 @@ export function CategoriesPage() {
               <input
                 type="number"
                 value={editingOption.extra_price}
-                onChange={(e) => setEditingOption((p: any) => ({ ...p, extra_price: Number(e.target.value) }))}
+                onChange={(e) => setEditingOption(p => ({ ...p, extra_price: Number(e.target.value) }))}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
               />
             </div>
@@ -433,7 +433,7 @@ export function CategoriesPage() {
               <input
                 type="number"
                 value={editingOption.sort_order || 1}
-                onChange={(e) => setEditingOption((p: any) => ({ ...p, sort_order: Number(e.target.value) }))}
+                onChange={(e) => setEditingOption(p => ({ ...p, sort_order: Number(e.target.value) }))}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
               />
             </div>
@@ -443,7 +443,7 @@ export function CategoriesPage() {
               <input
                 type="checkbox"
                 checked={editingOption.is_required}
-                onChange={(e) => setEditingOption((p: any) => ({ ...p, is_required: e.target.checked }))}
+                onChange={(e) => setEditingOption(p => ({ ...p, is_required: e.target.checked }))}
                 className="rounded"
               />
               <span className="font-medium">Bắt buộc chọn</span>
@@ -452,7 +452,7 @@ export function CategoriesPage() {
               <input
                 type="checkbox"
                 checked={editingOption.is_multiple}
-                onChange={(e) => setEditingOption((p: any) => ({ ...p, is_multiple: e.target.checked }))}
+                onChange={(e) => setEditingOption(p => ({ ...p, is_multiple: e.target.checked }))}
                 className="rounded"
               />
               <span className="font-medium">Cho phép chọn nhiều</span>

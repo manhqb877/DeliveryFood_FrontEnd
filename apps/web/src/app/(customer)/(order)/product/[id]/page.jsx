@@ -29,7 +29,7 @@ export default function ProductDetailPage() {
     if (!id) return;
     const fetchProduct = async () => {
       try {
-        const response = await fetch(`http://localhost:8080/api/v1/core/items/${id}`);
+        const response = await fetch(`http://localhost:8080/api/v1/core/items/${id}`, { cache: 'no-store' });
         if (!response.ok) throw new Error("Không thể tải thông tin sản phẩm");
         const data = await response.json();
         setProduct(data);
@@ -82,24 +82,12 @@ export default function ProductDetailPage() {
     }, {});
   };
 
-  const handleOptionChange = (groupName, optionId, isMultiple, isRequired) => {
+  const handleOptionChange = (groupName, option, isRadio) => {
     setSelectedOptions(prev => {
-      const groupOptions = prev[groupName] || [];
-      
-      if (!isMultiple) {
-        // Single selection
-        if (!isRequired && groupOptions.includes(optionId)) {
-          return { ...prev, [groupName]: [] };
-        }
-        return { ...prev, [groupName]: [optionId] };
-      } else {
-        // Multiple selection
-        if (groupOptions.includes(optionId)) {
-          return { ...prev, [groupName]: groupOptions.filter(id => id !== optionId) };
-        } else {
-          return { ...prev, [groupName]: [...groupOptions, optionId] };
-        }
-      }
+      const current = prev[groupName] || [];
+      if (isRadio) return { ...prev, [groupName]: [option.id] };
+      if (current.includes(option.id)) return { ...prev, [groupName]: current.filter(id => id !== option.id) };
+      return { ...prev, [groupName]: [...current, option.id] };
     });
   };
 
@@ -338,7 +326,7 @@ export default function ProductDetailPage() {
               {/* Add to cart */}
               <button 
                 onClick={handleAddToCart}
-                disabled={!isFormValid() || isAdding}
+                disabled={!isFormValid() || isAdding || product?.status === 'SOLD_OUT'}
                 className="h-[52px] px-8 bg-[var(--color-primary)] text-black rounded-full text-[14px] font-bold tracking-wide flex items-center justify-center gap-2 hover:bg-[var(--color-primary-dark)] hover:text-white transition-colors shadow-sm cursor-pointer whitespace-nowrap flex-1 w-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isAdding ? (
@@ -346,7 +334,12 @@ export default function ProductDetailPage() {
                 ) : (
                   <ShoppingBagIcon className="w-5 h-5" />
                 )}
-                {isAdding ? 'ĐANG THÊM...' : `THÊM VÀO GIỎ - ${calculateTotalPrice().toLocaleString('vi-VN')} đ`}
+                {product?.status === 'SOLD_OUT' 
+                  ? 'ĐÃ HẾT MÓN'
+                  : isAdding 
+                    ? 'ĐANG THÊM...' 
+                    : `THÊM VÀO GIỎ - ${calculateTotalPrice().toLocaleString('vi-VN')} đ`
+                }
               </button>
             </div>
 

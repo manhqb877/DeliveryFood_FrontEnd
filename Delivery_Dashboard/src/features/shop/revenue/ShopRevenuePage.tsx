@@ -36,11 +36,6 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import {
-  initialCommissionRecords,
-  initialCustomerPurchaseRecords,
-  initialHourlyAnalysis,
-  initialPromotions,
-  initialPayoutSchedules,
   CommissionRecord,
   CustomerPurchaseRecord,
   PlatformPayoutSchedule,
@@ -468,8 +463,8 @@ function CustomerTable({ customers }: { customers: CustomerPurchaseRecord[] }) {
 }
 
 // ============ Peak Hour Heatmap ============
-function HourlyHeatmap({ data }: { data?: typeof initialHourlyAnalysis }) {
-  const hours = data && data.length > 0 ? data : initialHourlyAnalysis;
+function HourlyHeatmap({ data }: { data?: HourlyOrderAnalysis[] }) {
+  const hours = data || [];
   const max = Math.max(...hours.map((h) => h.order_count), 1);
 
   return (
@@ -506,7 +501,7 @@ function HourlyHeatmap({ data }: { data?: typeof initialHourlyAnalysis }) {
 
 // ============ Voucher Usage Table ============
 function VoucherUsageTable({ promotions, shopId }: { promotions?: Promotion[]; shopId?: number }) {
-  const list = promotions && promotions.length > 0 ? promotions : initialPromotions;
+  const list = promotions || [];
   const shopPromos = list.filter((p) => !p.shop_id || p.shop_id === shopId);
   const platformPromos = list.filter((p) => p.scope === 'PLATFORM');
   const allVisible = [...shopPromos, ...platformPromos.filter((p) => (p.used_count || 0) > 0)];
@@ -1104,7 +1099,7 @@ export function ShopRevenuePage() {
           </div>
 
           <CommissionTable
-            records={commissionRecords.length > 0 ? commissionRecords : initialCommissionRecords}
+            records={commissionRecords}
             periodFilter={periodFilter}
             onPeriodChange={setPeriodFilter}
           />
@@ -1123,7 +1118,7 @@ export function ShopRevenuePage() {
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs text-center">
               <p className="text-xs text-slate-500">Tổng Khách Hàng</p>
               <p className="text-2xl font-bold text-slate-800 mt-1">
-                {customerRecords.length > 0 ? customerRecords.length : initialCustomerPurchaseRecords.length}
+                {customerRecords.length}
               </p>
             </div>
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs text-center">
@@ -1151,11 +1146,7 @@ export function ShopRevenuePage() {
             sub="Tất cả khách hàng đã đặt món tại quán, sắp xếp theo tổng chi tiêu thực tế"
           />
           <CustomerTable
-            customers={
-              customerRecords.length > 0
-                ? [...customerRecords].sort((a, b) => b.total_spent - a.total_spent)
-                : initialCustomerPurchaseRecords
-            }
+            customers={[...customerRecords].sort((a, b) => b.total_spent - a.total_spent)}
           />
         </div>
       )}
@@ -1237,14 +1228,14 @@ export function ShopRevenuePage() {
             {[
               {
                 label: 'Voucher Đang Hoạt Động',
-                value: (promotions.length > 0 ? promotions : initialPromotions).filter(
+                value: promotions.filter(
                   (p) => p.is_active && p.approval_status === 'APPROVED'
                 ).length,
                 icon: '✅',
               },
               {
                 label: 'Tổng Mã Khuyến Mãi',
-                value: (promotions.length > 0 ? promotions : initialPromotions).length,
+                value: promotions.length,
                 icon: '🎟',
               },
               {

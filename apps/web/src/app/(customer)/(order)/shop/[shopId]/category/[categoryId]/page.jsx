@@ -20,7 +20,7 @@ export default function CategoryPage() {
 
     const fetchShopDetails = async () => {
       try {
-        const response = await fetch(`http://localhost:8080/api/v1/core/shops/${shopId}/details`);
+        const response = await fetch(`http://localhost:8080/api/v1/core/shops/${shopId}/details`, { cache: 'no-store' });
         const data = await response.json();
 
         if (!response.ok || data.error || !data.categories) {
