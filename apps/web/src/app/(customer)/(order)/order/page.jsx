@@ -62,7 +62,7 @@ export default function OrderPage() {
       setErrorMsg('');
       setShopDetails(null);
       try {
-        const response = await fetch(`http://localhost:8080/api/v1/core/shops/${selectedShopId}/details`);
+        const response = await fetch(`http://localhost:8080/api/v1/core/shops/${selectedShopId}/details`, { cache: 'no-store' });
         const data = await response.json();
 
         if (!response.ok || data.error || !data.categories) {

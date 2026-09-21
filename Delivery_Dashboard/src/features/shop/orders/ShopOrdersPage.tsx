@@ -3,6 +3,7 @@ import { dbService } from '@/api/client';
 import { Order } from '@/api/mockData';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
 import {
   Check, X, Clock, ShoppingBag, MapPin, User, Phone,
   AlertCircle, RefreshCw, ChefHat, Bell, Flame, PackageCheck,
@@ -110,7 +111,7 @@ function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDeta
   const isHistory = ['ASSIGNED', 'PICKED_UP', 'DELIVERING', 'DELIVERED', 'COMPLETED', 'CANCELLED'].includes(order.order_status);
 
   const cardClass = `
-    bg-white rounded-xl border shadow-sm transition-all duration-500 p-5 flex flex-col gap-4
+    bg-white rounded-xl border shadow-sm transition-all duration-500 p-5 flex flex-col gap-4 h-full
     ${entering ? 'animate-slide-in-up' : ''}
     ${isNew ? 'border-blue-300 shadow-blue-100' : ''}
     ${isPreparing ? 'border-amber-200 shadow-amber-50' : ''}
@@ -223,7 +224,7 @@ function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDeta
       </div>
 
       {/* FSM Actions */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 mt-auto pt-2">
         {isNew && (
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -290,6 +291,8 @@ export function ShopOrdersPage() {
   const [transitioning, setTransitioning] = useState<number | null>(null);
   const prevOrderIds = useRef<Set<number>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -337,17 +340,22 @@ export function ShopOrdersPage() {
       // Auto-switch to next progress stage as user requested ("xác nhận xong chuyển tiến trình")
       if (targetTab) {
         setActiveTab(targetTab);
+        setCurrentPage(1);
       } else if (nextStatus === 'CONFIRMED' || nextStatus === 'PREPARING') {
         setActiveTab('PREPARING');
+        setCurrentPage(1);
         showToast('✓ Đã xác nhận đơn hàng thành công! Đơn đã chuyển sang tiến trình "Đang Nấu".');
       } else if (nextStatus === 'READY_FOR_PICKUP') {
         setActiveTab('READY');
+        setCurrentPage(1);
         showToast('✓ Đã báo món sẵn sàng! Đơn đã chuyển sang tiến trình "Chờ Lấy".');
       } else if (['DELIVERING', 'DELIVERED', 'COMPLETED'].includes(nextStatus)) {
         setActiveTab('HISTORY');
+        setCurrentPage(1);
         showToast('✓ Đã bàn giao cho Shipper! Đơn đã chuyển sang tiến trình "Lịch Sử".');
       } else if (nextStatus === 'CANCELLED') {
         setActiveTab('HISTORY');
+        setCurrentPage(1);
         showToast('Đã từ chối đơn hàng.');
       }
     } catch (e) {
@@ -381,6 +389,9 @@ export function ShopOrdersPage() {
     activeTab === 'PREPARING' ? preparingOrders :
     activeTab === 'READY' ? readyOrders :
     historyOrders;
+
+  const totalPages = Math.ceil(currentList.length / itemsPerPage);
+  const paginatedList = currentList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const tabs = [
     { key: 'NEW' as const, label: 'Đơn Mới', icon: Bell, count: newOrders.length, color: 'blue', dotColor: 'bg-blue-600' },
@@ -449,7 +460,10 @@ export function ShopOrdersPage() {
           return (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => {
+                setActiveTab(tab.key);
+                setCurrentPage(1);
+              }}
               className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
                 activeTab === tab.key
                   ? `bg-${tab.color === 'blue' ? 'blue' : tab.color === 'amber' ? 'amber' : tab.color === 'emerald' ? 'emerald' : 'slate'}-600 border-transparent text-white shadow-md`
@@ -479,23 +493,31 @@ export function ShopOrdersPage() {
           <p className="text-slate-400 text-xs mt-1">Đơn mới sẽ xuất hiện tự động mỗi 5 giây.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {currentList.map((order) => (
-            <div
-              key={order.id}
-              className={transitioning === order.id ? 'animate-exit pointer-events-none' : 'animate-slide-in-up'}
-            >
-              <OrderCard
-                order={order}
-                entering={!prevOrderIds.current.has(order.id)}
-                onConfirm={() => handleUpdateStatus(order.id, 'CONFIRMED')}
-                onReady={() => handleUpdateStatus(order.id, 'READY_FOR_PICKUP')}
-                onHandover={() => handleUpdateStatus(order.id, 'DELIVERING')}
-                onReject={() => setCancelModalOrder(order)}
-                onViewDetail={() => setDetailOrder(order)}
-              />
-            </div>
-          ))}
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
+            {paginatedList.map((order) => (
+              <div
+                key={order.id}
+                className={transitioning === order.id ? 'animate-exit pointer-events-none' : 'animate-slide-in-up'}
+              >
+                <OrderCard
+                  order={order}
+                  entering={!prevOrderIds.current.has(order.id)}
+                  onConfirm={() => handleUpdateStatus(order.id, 'CONFIRMED')}
+                  onReady={() => handleUpdateStatus(order.id, 'READY_FOR_PICKUP')}
+                  onHandover={() => handleUpdateStatus(order.id, 'DELIVERING')}
+                  onReject={() => setCancelModalOrder(order)}
+                  onViewDetail={() => setDetailOrder(order)}
+                />
+              </div>
+            ))}
+          </div>
+          
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
