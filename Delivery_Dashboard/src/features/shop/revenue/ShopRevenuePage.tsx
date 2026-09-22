@@ -606,6 +606,7 @@ const TAB_LABELS: Record<Tab, string> = {
 
 export function ShopRevenuePage() {
   const [shop, setShop] = useState<ShopProfile | null>(null);
+  const [wallet, setWallet] = useState<{ balance: number; status: string } | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -619,12 +620,16 @@ export function ShopRevenuePage() {
       const myShop = await dbService.getMyShop();
       setShop(myShop);
       const currentShopId = myShop?.id || 1;
-      const [shopOrders, shopPromos] = await Promise.all([
+      const ownerId = myShop?.owner_id || 0;
+      
+      const [shopOrders, shopPromos, shopWallet] = await Promise.all([
         dbService.getOrders({ shop_id: currentShopId }),
         dbService.getPromotions('SHOP'),
+        dbService.getShopWallet(ownerId)
       ]);
       setOrders(shopOrders);
       setPromotions(shopPromos.filter(p => !p.shop_id || p.shop_id === currentShopId));
+      setWallet(shopWallet);
     } catch (err) {
       console.error('Error fetching shop revenue data:', err);
     } finally {
@@ -936,6 +941,27 @@ export function ShopRevenuePage() {
           sub="Khấu trừ tự động theo kỳ đối soát"
         />
       </div>
+
+      {/* Shop Wallet Banner */}
+      <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-6 mt-6 flex items-center justify-between shadow-sm">
+        <div>
+          <h3 className="text-sm font-bold text-indigo-800 uppercase tracking-wider mb-1 flex items-center gap-2">
+            <DollarSign className="w-4 h-4" />
+            Số Dư Ví Cửa Hàng
+          </h3>
+          <p className="text-4xl font-black text-indigo-900 mt-1 tracking-tight">
+            {wallet ? `${wallet.balance.toLocaleString()} ₫` : '0 ₫'}
+          </p>
+          <p className="text-xs text-indigo-600 mt-2 font-medium flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" />
+            Trạng thái ví: {wallet?.status === 'ACTIVE' ? 'Hoạt động bình thường' : 'Đang khóa'}
+          </p>
+        </div>
+        <div className="w-20 h-20 bg-white rounded-2xl shadow-sm border border-indigo-100 flex items-center justify-center">
+          <DollarSign className="w-10 h-10 text-indigo-600" />
+        </div>
+      </div>
+
 
       {/* Sub Tabs */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto">

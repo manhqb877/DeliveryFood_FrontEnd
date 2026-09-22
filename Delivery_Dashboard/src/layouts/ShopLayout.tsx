@@ -75,6 +75,7 @@ export function ShopLayout() {
       groupLabel: 'ĐƠN HÀNG',
       items: [
         { path: '/shop/orders', label: 'Xử lý đơn hàng (Kanban)', icon: <ShoppingBag className="w-4 h-4" /> },
+        { path: '/shop/shippers', label: 'Theo dõi Shipper', icon: <ArrowRightLeft className="w-4 h-4" /> },
       ],
     },
     {
@@ -97,7 +98,7 @@ export function ShopLayout() {
           </div>
           <div className="truncate">
             <h1 className="font-bold text-sm text-white truncate">{shop?.shop_name || 'SHOP MANAGER'}</h1>
-            <p className="text-[11px] text-slate-400 font-medium truncate">{shop?.area_name || 'Vinhomes Grand Park'}</p>
+            <p className="text-[11px] text-slate-400 font-medium truncate">{shop?.location_detail || shop?.area_name || 'Đang cập nhật địa chỉ...'}</p>
           </div>
         </div>
 

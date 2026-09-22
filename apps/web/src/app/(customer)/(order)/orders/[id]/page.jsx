@@ -1,11 +1,17 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronLeft, CheckCircle2, Clock, MapPin, Package, Receipt, Truck } from 'lucide-react';
+import { ChevronLeft, CheckCircle2, Clock, MapPin, Package, Receipt, Truck, Star } from 'lucide-react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import AccountSidebarLayout from '@/components/layout/AccountSidebarLayout';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+const ShipperTrackingMap = dynamic(
+  () => import('@/components/ShipperTrackingMap').then(mod => mod.ShipperTrackingMap),
+  { ssr: false, loading: () => <div className="w-full h-64 bg-slate-100 animate-pulse rounded-xl" /> }
+);
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.151:8080/api/v1';
 
 export default function OrderDetailsPage() {
   const params = useParams();
@@ -13,6 +19,19 @@ export default function OrderDetailsPage() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deliveryData, setDeliveryData] = useState(null);
+
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [hasReviewed, setHasReviewed] = useState(false);
+  const [existingReview, setExistingReview] = useState(null);
+  const [reviewForm, setReviewForm] = useState({
+    shopRating: 5,
+    shopComment: '',
+    shipperRating: 5,
+    shipperComment: '',
+    productReviews: []
+  });
 
   useEffect(() => {
     if (params.id) {
@@ -54,16 +73,51 @@ export default function OrderDetailsPage() {
       const res = await fetch(`${API}/orders/${orderId}`, { headers });
       if (res.ok) {
         const data = await res.json();
-        // Assuming ApiResponse wrapper or direct object
         setOrder(data.data || data);
+
+        // Fetch delivery tracking data if the order is active
+        try {
+          const delRes = await fetch(`${API}/tracking/deliveries/order/${orderId}`);
+          if (delRes.ok) {
+            const delData = await delRes.json();
+            setDeliveryData(delData);
+          }
+        } catch (e) {
+          console.warn('Could not fetch delivery data:', e);
+        }
       } else {
         setError('Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn này.');
       }
+      checkReview(orderId);
     } catch (err) {
-      console.error(err);
-      setError('Lỗi kết nối máy chủ.');
+      setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkReview = async (orderId) => {
+    try {
+      const [reviewRes, productReviewRes] = await Promise.all([
+        fetch(`${API}/reviews/order/${orderId}`),
+        fetch(`${API}/reviews/product-reviews/order/${orderId}`)
+      ]);
+      if (reviewRes.ok) {
+        const text = await reviewRes.text();
+        if (text) {
+          const data = JSON.parse(text);
+          if (productReviewRes.ok) {
+            const pText = await productReviewRes.text();
+            if (pText) {
+              data.productReviews = JSON.parse(pText);
+            }
+          }
+          setExistingReview(data);
+          setHasReviewed(true);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not check review status', err);
     }
   };
 
@@ -130,11 +184,34 @@ export default function OrderDetailsPage() {
           </h3>
           <div className="flex items-center text-sm font-semibold text-gray-700">
             {order.orderStatus === 'PLACED' && "Đang chờ nhà hàng xác nhận..."}
-            {order.orderStatus === 'CONFIRMED' && "Nhà hàng đang chuẩn bị món..."}
+            {order.orderStatus === 'CONFIRMED' && "Nhà hàng đã xác nhận, đang chuẩn bị..."}
+            {order.orderStatus === 'PREPARING' && "Nhà hàng đang chuẩn bị món..."}
+            {order.orderStatus === 'READY_FOR_PICKUP' && "Món đã sẵn sàng, chờ Shipper lấy..."}
+            {order.orderStatus === 'ASSIGNED' && "Đã tìm thấy Shipper!"}
+            {order.orderStatus === 'PICKED_UP' && "Shipper đã lấy hàng!"}
             {order.orderStatus === 'DELIVERING' && "Shipper đang giao hàng đến bạn!"}
-            {order.orderStatus === 'COMPLETED' && "Giao hàng thành công!"}
+            {order.orderStatus === 'DELIVERED' && "Giao hàng thành công!"}
+            {order.orderStatus === 'COMPLETED' && "Đơn hàng đã hoàn tất!"}
+            {order.orderStatus === 'CANCELLED' && "Đơn hàng đã bị hủy!"}
           </div>
         </div>
+
+        {/* Vị trí Shipper (hiện khi đang lấy hàng hoặc đang giao) */}
+        {order.orderStatus !== 'CANCELLED' && ['PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'DELIVERING'].includes(order.orderStatus) && deliveryData?.shipperId && (
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+            <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-red-600" />
+              Định vị vị trí giao hàng
+            </h3>
+            <div className="h-64 md:h-96 w-full rounded-2xl overflow-hidden border border-gray-200 relative z-0 shadow-sm">
+              <ShipperTrackingMap
+                shipperId={deliveryData.shipperId}
+                pickupLocation={{ lat: deliveryData.pickupLat || 10.7769, lng: deliveryData.pickupLng || 106.7009 }}
+                deliveryLocation={{ lat: deliveryData.deliveryLat || 10.7800, lng: deliveryData.deliveryLng || 106.7050 }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Delivery Address */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -241,7 +318,231 @@ export default function OrderDetailsPage() {
           </div>
         </div>
 
+        {/* Nút Đánh giá hoặc Hiển thị Đánh giá */}
+        {(order.orderStatus === 'DELIVERED' || order.orderStatus === 'COMPLETED') && (
+          <div className="mt-6 flex flex-col items-center pb-6">
+            {!hasReviewed ? (
+              <button
+                onClick={() => setShowReviewModal(true)}
+                className="bg-yellow-400 text-black px-6 py-3 rounded-full font-bold shadow hover:bg-yellow-500 transition-colors flex items-center gap-2"
+              >
+                <Star className="w-5 h-5" /> Đánh giá đơn hàng
+              </button>
+            ) : existingReview && (
+              <div className="w-full bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex flex-col items-center">
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-3">
+                  <Star className="w-6 h-6 fill-current" />
+                </div>
+                <h4 className="font-bold text-gray-900 mb-1">Cảm ơn bạn đã đánh giá!</h4>
+                <p className="text-sm text-gray-500 mb-4 text-center">Đánh giá của bạn giúp chúng tôi cải thiện chất lượng dịch vụ tốt hơn mỗi ngày.</p>
+                <div className="w-full space-y-3 text-left bg-gray-50 p-4 rounded-xl">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-gray-700">Cửa hàng:</span>
+                    <div className="flex text-yellow-400">
+                      {[...Array(existingReview.shopRating || 5)].map((_, i) => <Star key={i} className="w-4 h-4 fill-current" />)}
+                    </div>
+                  </div>
+                  {existingReview.shopComment && <p className="text-sm text-gray-600 ml-4 italic">"{existingReview.shopComment}"</p>}
+                  
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-sm font-semibold text-gray-700">Shipper:</span>
+                    <div className="flex text-yellow-400">
+                      {[...Array(existingReview.shipperRating || 5)].map((_, i) => <Star key={i} className="w-4 h-4 fill-current" />)}
+                    </div>
+                  </div>
+                  {existingReview.shipperComment && <p className="text-sm text-gray-600 ml-4 italic">"{existingReview.shipperComment}"</p>}
+                  
+                  {existingReview.productReviews && existingReview.productReviews.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <span className="text-sm font-bold text-gray-900 mb-2 block">Món ăn:</span>
+                      <div className="space-y-3">
+                        {existingReview.productReviews.map(pr => {
+                          const item = order.items?.find(i => i.itemId === pr.productId);
+                          return (
+                            <div key={pr.id} className="bg-white p-3 rounded-lg border border-gray-100">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-sm font-semibold text-gray-800">{item ? item.itemName : 'Sản phẩm'}</span>
+                                <div className="flex text-yellow-400">
+                                  {[...Array(pr.rating || 5)].map((_, i) => <Star key={i} className="w-3 h-3 fill-current" />)}
+                                </div>
+                              </div>
+                              {pr.comment && <p className="text-sm text-gray-600 italic">"{pr.comment}"</p>}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
+      
+      {/* Modal Đánh giá */}
+      {showReviewModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 pt-10 pb-10 overflow-hidden">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-full overflow-y-auto shadow-2xl relative">
+            <button 
+              onClick={() => setShowReviewModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+            <h3 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-2">
+              <Star className="w-6 h-6 text-yellow-500 fill-current" />
+              Đánh giá Đơn hàng #{order.id}
+            </h3>
+
+            {/* Đánh giá Cửa hàng */}
+            <div className="mb-6">
+              <h4 className="font-bold text-gray-800 mb-2 text-sm">Chất lượng Cửa hàng</h4>
+              <div className="flex items-center gap-1 mb-3">
+                {[1, 2, 3, 4, 5].map(s => (
+                  <Star 
+                    key={`shop-${s}`} 
+                    className={`w-8 h-8 cursor-pointer transition-colors ${reviewForm.shopRating >= s ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`}
+                    onClick={() => setReviewForm(prev => ({ ...prev, shopRating: s }))}
+                  />
+                ))}
+              </div>
+              <textarea
+                className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:border-red-500"
+                placeholder="Nhận xét về cửa hàng (tuỳ chọn)..."
+                rows={2}
+                value={reviewForm.shopComment}
+                onChange={e => setReviewForm(prev => ({ ...prev, shopComment: e.target.value }))}
+              />
+            </div>
+
+            {/* Đánh giá Shipper */}
+            {order.shipperId && (
+              <div className="mb-6 border-t pt-4">
+                <h4 className="font-bold text-gray-800 mb-2 text-sm">Tài xế giao hàng</h4>
+                <div className="flex items-center gap-1 mb-3">
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <Star 
+                      key={`shipper-${s}`} 
+                      className={`w-8 h-8 cursor-pointer transition-colors ${reviewForm.shipperRating >= s ? 'fill-yellow-400 text-yellow-400' : 'text-gray-200'}`}
+                      onClick={() => setReviewForm(prev => ({ ...prev, shipperRating: s }))}
+                    />
+                  ))}
+                </div>
+                <textarea
+                  className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:border-red-500"
+                  placeholder="Nhận xét về tài xế (tuỳ chọn)..."
+                  rows={2}
+                  value={reviewForm.shipperComment}
+                  onChange={e => setReviewForm(prev => ({ ...prev, shipperComment: e.target.value }))}
+                />
+              </div>
+            )}
+
+            {/* Đánh giá Món ăn */}
+            <div className="mb-6 border-t pt-4">
+              <h4 className="font-bold text-gray-800 mb-3 text-sm">Đánh giá Món ăn</h4>
+              {order.items?.map(item => {
+                const pReview = reviewForm.productReviews.find(pr => pr.productId === item.itemId) || { rating: 5, comment: '' };
+                return (
+                  <div key={item.id} className="mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <p className="font-semibold text-sm text-gray-800 mb-2">{item.itemName}</p>
+                    <div className="flex gap-1 mb-2">
+                      {[1, 2, 3, 4, 5].map(s => (
+                        <Star 
+                          key={`prod-${item.id}-${s}`} 
+                          className={`w-6 h-6 cursor-pointer ${pReview.rating >= s ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
+                          onClick={() => {
+                            const newPrs = [...reviewForm.productReviews];
+                            const idx = newPrs.findIndex(pr => pr.productId === item.itemId);
+                            if (idx >= 0) newPrs[idx].rating = s;
+                            else newPrs.push({ productId: item.itemId, rating: s, comment: '' });
+                            setReviewForm(prev => ({ ...prev, productReviews: newPrs }));
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <textarea
+                      className="w-full border border-gray-200 rounded p-2 text-sm focus:outline-none focus:border-red-500"
+                      placeholder="Nhận xét món này..."
+                      rows={1}
+                      value={pReview.comment}
+                      onChange={e => {
+                        const newPrs = [...reviewForm.productReviews];
+                        const idx = newPrs.findIndex(pr => pr.productId === item.itemId);
+                        if (idx >= 0) newPrs[idx].comment = e.target.value;
+                        else newPrs.push({ productId: item.itemId, rating: 5, comment: e.target.value });
+                        setReviewForm(prev => ({ ...prev, productReviews: newPrs }));
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-3 justify-end pt-4 border-t">
+              <button 
+                onClick={() => setShowReviewModal(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-600 rounded-full font-bold hover:bg-gray-200"
+              >
+                Hủy
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                    setIsSubmittingReview(true);
+                    let token = localStorage.getItem('fooddelivery_access_token');
+                    let userId = null;
+                    let guestId = localStorage.getItem('befood_guest_session_id');
+                    try { userId = JSON.parse(localStorage.getItem('fooddelivery_user'))?.id; } catch (e) {}
+
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (token) headers['Authorization'] = `Bearer ${token}`;
+                    if (userId) headers['X-User-Id'] = userId;
+                    else if (guestId) headers['X-Guest-Session-Id'] = guestId;
+
+                    const payload = {
+                      orderId: order.id,
+                      shopRating: reviewForm.shopRating,
+                      shopComment: reviewForm.shopComment,
+                      shipperRating: reviewForm.shipperRating,
+                      shipperComment: reviewForm.shipperComment,
+                      productReviews: order.items?.map(item => ({
+                        productId: item.itemId,
+                        rating: reviewForm.productReviews.find(pr => pr.productId === item.itemId)?.rating || 5,
+                        comment: reviewForm.productReviews.find(pr => pr.productId === item.itemId)?.comment || ''
+                      })) || []
+                    };
+
+                    const res = await fetch(`${API}/reviews`, {
+                      method: 'POST',
+                      headers,
+                      body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                      setHasReviewed(true);
+                      setShowReviewModal(false);
+                      checkReview(order.id);
+                    } else {
+                      alert('Có lỗi xảy ra khi gửi đánh giá');
+                    }
+                  } catch (err) {
+                    alert('Lỗi kết nối');
+                  } finally {
+                    setIsSubmittingReview(false);
+                  }
+                }}
+                disabled={isSubmittingReview}
+                className="px-6 py-2 bg-red-600 text-white rounded-full font-bold hover:bg-red-700 disabled:opacity-50"
+              >
+                {isSubmittingReview ? 'Đang gửi...' : 'Gửi Đánh giá'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AccountSidebarLayout>
   );
 }

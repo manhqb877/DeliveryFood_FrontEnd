@@ -1,214 +1,230 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '@/api/client';
-import { Complaint } from '@/api/mockData';
-import { Table, Column } from '@/components/ui/Table';
-import { FilterBar } from '@/components/ui/FilterBar';
-import { Badge } from '@/components/ui/Badge';
-import { Modal } from '@/components/ui/Modal';
-import { AlertTriangle, CheckCircle, Image as ImageIcon } from 'lucide-react';
+import { Star, MessageSquare, User, ChevronDown, RefreshCw, Package } from 'lucide-react';
+
+interface ReviewRecord {
+  id: number;
+  order_code: string;
+  complainant_name: string;
+  reason_type: string;
+  description: string;
+  status: string;
+  shipper_id?: number;
+  shipper_rating?: number;
+  shop_id?: number;
+  shop_rating?: number;
+  shop_comment?: string;
+  image_urls?: string[];
+  resolution?: string | null;
+  resolved_at?: string | null;
+  created_at: string;
+}
 
 export function ComplaintsPage() {
-  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [reviews, setReviews] = useState<ReviewRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [ratingFilter, setRatingFilter] = useState<'ALL' | 'LOW' | 'HIGH'>('ALL');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
-  const [resolutionInput, setResolutionInput] = useState('');
-
-  const loadData = async () => {
+  const load = async () => {
     setLoading(true);
     const data = await dbService.getComplaints();
-    setComplaints(data);
+    setReviews(data as any);
     setLoading(false);
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const handleResolve = async (newStatus: Complaint['status']) => {
-    if (!selectedComplaint) return;
-    if (!resolutionInput.trim()) {
-      alert('Vui lòng nhập phương án xử lý khiếu nại!');
-      return;
-    }
-    await dbService.resolveComplaint(selectedComplaint.id, resolutionInput, newStatus);
-    alert('Cập nhật xử lý khiếu nại thành công!');
-    setSelectedComplaint(null);
-    setResolutionInput('');
-    loadData();
+  const filtered = reviews.filter(r => {
+    if (ratingFilter === 'LOW') return (r.shipper_rating != null && r.shipper_rating <= 3);
+    if (ratingFilter === 'HIGH') return (r.shipper_rating != null && r.shipper_rating >= 4);
+    return true;
+  });
+
+  const avgRating = reviews.length > 0
+    ? (reviews.reduce((s, r) => s + (r.shipper_rating || 0), 0) / reviews.filter(r => r.shipper_rating).length).toFixed(1)
+    : '—';
+
+  const lowRatingCount = reviews.filter(r => r.shipper_rating != null && r.shipper_rating <= 3).length;
+
+  const renderStars = (rating?: number) => {
+    if (rating == null) return <span className="text-slate-400 text-xs">—</span>;
+    return (
+      <div className="flex gap-0.5">
+        {[1,2,3,4,5].map(i => (
+          <Star
+            key={i}
+            className={`w-4 h-4 ${i <= rating ? 'fill-amber-400 text-amber-400' : 'fill-slate-200 text-slate-200'}`}
+          />
+        ))}
+        <span className="ml-1 text-xs font-bold text-slate-600">{rating}/5</span>
+      </div>
+    );
   };
 
-  const filteredComplaints = complaints.filter(
-    (c) => statusFilter === 'ALL' || c.status === statusFilter
-  );
-
-  const columns: Column<Complaint>[] = [
-    {
-      header: 'Mã đơn / Người khiếu nại',
-      cell: (c) => (
-        <div>
-          <span className="font-mono text-blue-600 font-bold">{c.order_code}</span>
-          <p className="font-semibold text-slate-800 mt-0.5">{c.complainant_name}</p>
-        </div>
-      ),
-    },
-    {
-      header: 'Nguyên nhân khiếu nại',
-      cell: (c) => {
-        const reasonLabels: Record<string, string> = {
-          WRONG_ITEM: 'Giao sai món',
-          MISSING_ITEM: 'Thiếu món',
-          FOOD_QUALITY: 'Chất lượng kém',
-          LATE_DELIVERY: 'Giao trễ SLA',
-          RUDE_SHIPPER: 'Thái độ Shipper',
-          PAYMENT_ISSUE: 'Lỗi thanh toán',
-          OTHER: 'Khác',
-        };
-        return (
-          <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-            {reasonLabels[c.reason_type] || c.reason_type}
-          </span>
-        );
-      },
-    },
-    {
-      header: 'Nội dung mô tả',
-      cell: (c) => <p className="text-xs text-slate-600 line-clamp-2 max-w-xs">{c.description}</p>,
-    },
-    {
-      header: 'Trạng thái',
-      cell: (c) => <Badge statusText={c.status} />,
-    },
-    {
-      header: 'Thời gian gửi',
-      cell: (c) => <span className="text-xs text-slate-500">{new Date(c.created_at).toLocaleString('vi-VN')}</span>,
-    },
-    {
-      header: 'Hành động',
-      className: 'text-right',
-      cell: (c) => (
-        <button
-          onClick={() => {
-            setSelectedComplaint(c);
-            setResolutionInput(c.resolution || '');
-          }}
-          className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium cursor-pointer"
-        >
-          <span>Xử lý</span>
-        </button>
-      ),
-    },
-  ];
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-800">Quản Lý Khiếu Nại Đơn Hàng</h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Tiếp nhận, kiểm tra bằng chứng hình ảnh và ra quyết định bồi hoàn/giải quyết.
-        </p>
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Đánh giá Shipper từ Khách hàng</h1>
+          <p className="text-slate-500 text-sm mt-1">Theo dõi phản hồi của khách hàng về chất lượng giao hàng</p>
+        </div>
+        <button
+          onClick={load}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-600 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Làm mới
+        </button>
       </div>
 
-      <FilterBar
-        onRefresh={loadData}
-        dropdowns={[
-          {
-            id: 'status',
-            label: 'Trạng thái',
-            value: statusFilter,
-            onChange: setStatusFilter,
-            options: [
-              { label: 'Tất cả trạng thái', value: 'ALL' },
-              { label: 'Mới gửi (OPEN)', value: 'OPEN' },
-              { label: 'Đang xử lý (IN_REVIEW)', value: 'IN_REVIEW' },
-              { label: 'Đã giải quyết (RESOLVED)', value: 'RESOLVED' },
-              { label: 'Đóng (CLOSED)', value: 'CLOSED' },
-            ],
-          },
-        ]}
-      />
-
-      <Table
-        columns={columns}
-        data={filteredComplaints}
-        loading={loading}
-        keyExtractor={(c) => c.id}
-        emptyMessage="Không có khiếu nại nào"
-      />
-
-      {/* Complaint detail & resolution modal */}
-      <Modal
-        isOpen={!!selectedComplaint}
-        onClose={() => setSelectedComplaint(null)}
-        title="Xử Lý Khiếu Nại Đơn Hàng"
-        subtitle={`Đơn hàng: ${selectedComplaint?.order_code}`}
-        maxWidth="xl"
-      >
-        {selectedComplaint && (
-          <div className="space-y-4 text-xs">
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-bold text-slate-800 text-sm">
-                  Người khiếu nại: {selectedComplaint.complainant_name}
-                </span>
-                <Badge statusText={selectedComplaint.status} />
-              </div>
-              <p className="text-slate-700 bg-white p-3 rounded-lg border border-slate-200 mt-2">
-                "{selectedComplaint.description}"
-              </p>
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Tổng đánh giá', value: reviews.length, color: 'bg-blue-50 text-blue-600', icon: MessageSquare },
+          { label: 'Đánh giá thấp (≤3★)', value: lowRatingCount, color: 'bg-rose-50 text-rose-600', icon: Star },
+          { label: 'Điểm TB Shipper', value: avgRating + '★', color: 'bg-amber-50 text-amber-600', icon: Star },
+        ].map(({ label, value, color, icon: Icon }) => (
+          <div key={label} className={`${color.split(' ')[0]} rounded-2xl p-4 flex items-center gap-4`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
+              <Icon className="w-5 h-5" />
             </div>
-
-            {/* Proof images */}
-            {selectedComplaint.image_urls.length > 0 && (
-              <div>
-                <h5 className="font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-                  <ImageIcon className="w-4 h-4 text-blue-600" />
-                  Ảnh bằng chứng khách gửi:
-                </h5>
-                <div className="grid grid-cols-3 gap-2">
-                  {selectedComplaint.image_urls.map((url, idx) => (
-                    <img key={idx} src={url} alt="Bằng chứng" className="w-full h-32 object-cover rounded-lg border border-slate-200" />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Resolution form */}
             <div>
-              <label className="block font-bold text-slate-800 mb-1.5">Nội dung / Kết quả giải quyết:</label>
-              <textarea
-                rows={4}
-                value={resolutionInput}
-                onChange={(e) => setResolutionInput(e.target.value)}
-                placeholder="Nhập phương án giải quyết (ví dụ: Đồng ý hoàn tiền 15,000đ cho suất thiếu vào ví khách)..."
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-hidden focus:border-blue-500"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setSelectedComplaint(null)}
-                className="px-3.5 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                onClick={() => handleResolve('IN_REVIEW')}
-                className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 cursor-pointer"
-              >
-                Đánh Giá (In Review)
-              </button>
-              <button
-                onClick={() => handleResolve('RESOLVED')}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 cursor-pointer"
-              >
-                Đã Giải Quyết (Resolved)
-              </button>
+              <div className="text-2xl font-bold text-slate-800">{value}</div>
+              <div className="text-xs text-slate-500">{label}</div>
             </div>
           </div>
-        )}
-      </Modal>
+        ))}
+      </div>
+
+      {/* Filter */}
+      <div className="flex gap-2">
+        {[
+          { key: 'ALL', label: 'Tất cả' },
+          { key: 'LOW', label: '⚠️ Đánh giá thấp (≤3★)' },
+          { key: 'HIGH', label: '✅ Đánh giá tốt (≥4★)' },
+        ].map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setRatingFilter(key as any)}
+            className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+              ratingFilter === key
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Review List */}
+      {loading ? (
+        <div className="text-center py-16 text-slate-400">
+          <RefreshCw className="w-8 h-8 mx-auto mb-2 animate-spin" />
+          Đang tải dữ liệu...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+          <MessageSquare className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+          <p className="text-slate-500 font-medium">Chưa có đánh giá nào</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map(r => (
+            <div key={r.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-sm transition-shadow">
+              <div
+                className="flex items-center gap-4 p-4 cursor-pointer"
+                onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+              >
+                {/* Avatar */}
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                  <User className="w-5 h-5 text-blue-600" />
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold text-slate-800 text-sm">{r.complainant_name}</span>
+                    <span className="font-mono text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                      {r.order_code}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      {new Date(r.created_at).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-600 mt-0.5 line-clamp-1">{r.description}</p>
+                </div>
+
+                {/* Shipper Rating */}
+                <div className="shrink-0 flex items-center gap-3">
+                  {renderStars(r.shipper_rating ?? undefined)}
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expandedId === r.id ? 'rotate-180' : ''}`} />
+                </div>
+              </div>
+
+              {/* Expanded Detail */}
+              {expandedId === r.id && (
+                <div className="border-t border-slate-100 p-4 bg-slate-50 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Shipper Review */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-4">
+                      <h4 className="font-semibold text-slate-700 text-sm mb-3 flex items-center gap-2">
+                        🛵 Đánh giá Shipper
+                        {r.shipper_id && (
+                          <span className="text-xs text-slate-400 font-normal">ID #{r.shipper_id}</span>
+                        )}
+                      </h4>
+                      <div className="mb-2">{renderStars(r.shipper_rating ?? undefined)}</div>
+                      <p className="text-sm text-slate-600 italic">
+                        "{r.description || '(Không có nhận xét)'}"
+                      </p>
+                    </div>
+
+                    {/* Shop Review */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-4">
+                      <h4 className="font-semibold text-slate-700 text-sm mb-3 flex items-center gap-2">
+                        🏪 Đánh giá Quán
+                        {r.shop_id && (
+                          <span className="text-xs text-slate-400 font-normal">ID #{r.shop_id}</span>
+                        )}
+                      </h4>
+                      <div className="mb-2">{renderStars(r.shop_rating ?? undefined)}</div>
+                      <p className="text-sm text-slate-600 italic">
+                        "{r.shop_comment || '(Không có nhận xét)'}"
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Images */}
+                  {r.image_urls && r.image_urls.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 mb-2">Ảnh đính kèm</p>
+                      <div className="flex gap-2">
+                        {r.image_urls.map((url, i) => (
+                          <img key={i} src={url} alt="" className="w-20 h-20 object-cover rounded-lg border border-slate-200" />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Order Info */}
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <Package className="w-3.5 h-3.5" />
+                    Đơn hàng: <span className="font-mono font-bold text-blue-600">{r.order_code}</span>
+                    {r.shipper_rating != null && r.shipper_rating <= 3 && (
+                      <span className="ml-2 bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-semibold">
+                        ⚠️ Đánh giá thấp
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -25,6 +25,9 @@ export default function ProductDetailPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successItem, setSuccessItem] = useState(null);
 
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+
   useEffect(() => {
     if (!id) return;
     const fetchProduct = async () => {
@@ -72,7 +75,23 @@ export default function ProductDetailPage() {
         setLoading(false);
       }
     };
+
+    const fetchReviews = async () => {
+      try {
+        const response = await fetch(`http://localhost:8080/api/v1/reviews/product/${id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setReviews(data);
+        }
+      } catch (error) {
+        console.error("Lỗi tải đánh giá:", error);
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+
     fetchProduct();
+    fetchReviews();
   }, [id]);
 
   const groupBy = (array, key) => {
@@ -346,14 +365,14 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        {/* MOCK REVIEWS AND RELATED PRODUCTS */}
+        {/* REVIEWS */}
         <div className="mt-20 border-t border-gray-100 pt-16">
           <div className="flex items-center gap-3 mb-8">
             <h2 className="text-2xl font-black text-[#222222] uppercase">
               Đánh giá từ khách hàng
             </h2>
             <span className="bg-[var(--color-primary)]/20 text-[var(--color-primary-dark)] text-sm font-black px-3 py-1 rounded-full">
-              2 đánh giá
+              {reviews.length} đánh giá
             </span>
           </div>
 
@@ -362,52 +381,54 @@ export default function ProductDetailPage() {
               <div className="bg-gradient-to-b from-[#fff9f9] to-white border border-yellow-50 rounded-2xl p-6 shadow-sm">
                 <div className="text-center mb-5">
                   <div className="text-6xl font-black text-[var(--color-primary-dark)] leading-none">
-                    4.5
+                    {reviews.length > 0 
+                      ? (reviews.reduce((acc, curr) => acc + (curr.rating || 0), 0) / reviews.length).toFixed(1) 
+                      : "0.0"}
                   </div>
                   <div className="flex items-center justify-center gap-1 mt-2 text-amber-400 text-lg">
-                    {'★★★★☆'}
+                    {'★'.repeat(Math.round(reviews.length > 0 ? (reviews.reduce((acc, curr) => acc + (curr.rating || 0), 0) / reviews.length) : 0))}
+                    {'☆'.repeat(5 - Math.round(reviews.length > 0 ? (reviews.reduce((acc, curr) => acc + (curr.rating || 0), 0) / reviews.length) : 0))}
                   </div>
                   <p className="text-sm text-gray-500 font-semibold mt-2">
-                    Dựa trên 2 lượt đánh giá
+                    Dựa trên {reviews.length} lượt đánh giá
                   </p>
                 </div>
               </div>
             </div>
             <div className="lg:col-span-8 space-y-4">
-              <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-base bg-rose-100 text-rose-600">
-                      T
+              {reviewsLoading ? (
+                <div className="text-gray-500 text-center py-8">Đang tải đánh giá...</div>
+              ) : reviews.length === 0 ? (
+                <div className="text-gray-500 text-center py-8">Sản phẩm này chưa có đánh giá nào.</div>
+              ) : (
+                reviews.map(review => (
+                  <div key={review.id} className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-base bg-rose-100 text-rose-600">
+                          {review.userId ? `KH` : `Ẩn`}
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-800 text-sm">Khách hàng #{review.userId}</p>
+                          <p className="text-xs text-gray-400">{new Date(review.createdAt).toLocaleDateString('vi-VN')}</p>
+                        </div>
+                      </div>
+                      <div className="text-amber-400">
+                        {'★'.repeat(review.rating || 0)}{'☆'.repeat(5 - (review.rating || 0))}
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-gray-800 text-sm">Thái An</p>
-                      <p className="text-xs text-gray-400">18/09/2026</p>
-                    </div>
+                    {review.comment ? (
+                      <p className="text-sm text-gray-700 leading-relaxed mb-3">
+                        “{review.comment}”
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-400 italic mb-3">
+                        Không có nhận xét
+                      </p>
+                    )}
                   </div>
-                  <div className="text-amber-400">{'★★★★★'}</div>
-                </div>
-                <p className="text-sm text-gray-700 leading-relaxed mb-3">
-                  “Sản phẩm rất ngon, giao hàng siêu nhanh, shipper thân thiện!”
-                </p>
-              </div>
-              <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-base bg-indigo-100 text-indigo-600">
-                      H
-                    </div>
-                    <div>
-                      <p className="font-bold text-gray-800 text-sm">Hoàng Minh</p>
-                      <p className="text-xs text-gray-400">17/09/2026</p>
-                    </div>
-                  </div>
-                  <div className="text-amber-400">{'★★★★☆'}</div>
-                </div>
-                <p className="text-sm text-gray-700 leading-relaxed mb-3">
-                  “Mùi vị đúng chuẩn, nhưng đá hơi nhiều chút xíu. Tuy nhiên vẫn cho 4 sao vì ngon.”
-                </p>
-              </div>
+                ))
+              )}
             </div>
           </div>
 

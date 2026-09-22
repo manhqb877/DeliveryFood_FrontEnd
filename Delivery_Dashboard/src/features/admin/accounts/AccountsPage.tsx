@@ -40,19 +40,26 @@ export function AccountsPage() {
     }
   };
 
-  const handleResetPassword = () => {
+  const handleResetPassword = async () => {
     if (!newPassword || newPassword.length < 6) {
       alert('Vui lòng nhập mật khẩu mới ít nhất 6 ký tự!');
       return;
     }
-    alert(`Đã cấp lại mật khẩu mới cho tài khoản ${resetPassUser?.phone} thành công!`);
-    setResetPassUser(null);
-    setNewPassword('');
+    if (resetPassUser) {
+      await dbService.resetUserPassword(resetPassUser.id, newPassword);
+      alert(`Đã cấp lại mật khẩu mới cho tài khoản ${resetPassUser.phone} thành công!`);
+      setResetPassUser(null);
+      setNewPassword('');
+    }
   };
 
   const filteredUsers = users.filter((u) => {
+    const searchLower = search.toLowerCase();
+    const phoneStr = u.phone || '';
+    const nameStr = u.full_name || '';
+    
     const matchSearch =
-      u.phone.includes(search) || u.full_name.toLowerCase().includes(search.toLowerCase());
+      phoneStr.includes(search) || nameStr.toLowerCase().includes(searchLower);
     const matchRole = roleFilter === 'ALL' || u.role === roleFilter;
     const matchStatus = statusFilter === 'ALL' || u.status === statusFilter;
     return matchSearch && matchRole && matchStatus;

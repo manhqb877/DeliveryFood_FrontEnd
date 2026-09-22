@@ -24,7 +24,7 @@ export default function RootLayout({ children }) {
       lang="vi"
       className={`${quicksand.variable} ${plusJakartaSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans bg-gray-50">
+      <body className="min-h-full flex flex-col font-sans bg-gray-50" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>

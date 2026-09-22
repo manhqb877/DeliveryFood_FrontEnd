@@ -7,17 +7,25 @@ import { useAuth } from '@/context/AuthContext';
 export default function AccountSidebarLayout({ children, activeTab = 'profile' }) {
   const { user: contextUser } = useAuth();
 
+  const [isMounted, setIsMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   let name = 'Khách hàng';
-  if (typeof window !== 'undefined') {
-    const storedUser = localStorage.getItem('fooddelivery_user');
-    if (storedUser) {
-      try {
-        const parsed = JSON.parse(storedUser);
-        name = parsed.fullName || parsed.username || parsed.phone || 'Khách hàng';
-      } catch (e) {}
+  if (isMounted) {
+    if (contextUser) {
+      name = contextUser.fullName || contextUser.username || contextUser.phone || 'Khách hàng';
+    } else {
+      const storedUser = localStorage.getItem('fooddelivery_user');
+      if (storedUser) {
+        try {
+          const parsed = JSON.parse(storedUser);
+          name = parsed.fullName || parsed.username || parsed.phone || 'Khách hàng';
+        } catch (e) {}
+      }
     }
-  } else if (contextUser) {
-    name = contextUser.fullName || contextUser.username || contextUser.phone || 'Khách hàng';
   }
 
   return (

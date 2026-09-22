@@ -9,7 +9,11 @@ export function AuthProvider({ children }) {
   // Khởi tạo state từ cache localStorage để UI không bị giật
   const [user, setUser] = useState(() => {
     if (typeof window !== 'undefined' && authService.isAuthenticated()) {
-      return authService.getCurrentUser();
+      const currentUser = authService.getCurrentUser();
+      if (currentUser && currentUser.role === 'CUSTOMER') {
+        return currentUser;
+      }
+      authService.logout();
     }
     return null;
   });
@@ -20,12 +24,16 @@ export function AuthProvider({ children }) {
     try {
       if (authService.isAuthenticated()) {
         const profile = await authService.getProfile();
+        if (profile.role !== 'CUSTOMER') {
+          throw new Error('Tài khoản không có quyền truy cập trang khách hàng');
+        }
         setUser(profile);
       } else {
         setUser(null);
       }
     } catch {
       setUser(null);
+      authService.logout();
     }
   }, []);
 
@@ -37,10 +45,14 @@ export function AuthProvider({ children }) {
       authService
         .getProfile()
         .then((profile) => {
+          if (profile.role !== 'CUSTOMER') {
+            throw new Error('Tài khoản không có quyền truy cập trang khách hàng');
+          }
           if (isMounted) setUser(profile);
         })
         .catch(() => {
           if (isMounted) setUser(null);
+          authService.logout();
         });
     }
 
@@ -62,6 +74,10 @@ export function AuthProvider({ children }) {
     setIsLoading(true);
     try {
       const data = await authService.login(credentials);
+      if (data.user.role !== 'CUSTOMER') {
+        await authService.logout();
+        throw new Error('Tài khoản không có quyền truy cập trang khách hàng.');
+      }
       setUser(data.user);
       return data;
     } finally {

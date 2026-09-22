@@ -21,7 +21,7 @@ export function OrdersMonitorPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const data = await dbService.getOrders();
+    const data = await dbService.getAllOrders();
     setOrders(data);
     setLoading(false);
   };

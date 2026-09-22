@@ -28,6 +28,7 @@ import { ShopProfilePage } from '@/features/shop/profile/ShopProfilePage';
 import { CategoriesPage } from '@/features/shop/menu/CategoriesPage';
 import { MenuItemsPage } from '@/features/shop/menu/MenuItemsPage';
 import { ShopOrdersPage } from '@/features/shop/orders/ShopOrdersPage';
+import { ShopShippersPage } from '@/features/shop/shippers/ShopShippersPage';
 import { ShopPromotionsPage } from '@/features/shop/promotions/ShopPromotionsPage';
 import { ShopReviewsPage } from '@/features/shop/reviews/ShopReviewsPage';
 
@@ -96,6 +97,7 @@ export const router = createBrowserRouter([
           { path: 'menu/categories', element: <CategoriesPage /> },
           { path: 'menu/items', element: <MenuItemsPage /> },
           { path: 'orders', element: <ShopOrdersPage /> },
+          { path: 'shippers', element: <ShopShippersPage /> },
           { path: 'promotions', element: <ShopPromotionsPage /> },
           { path: 'reviews', element: <ShopReviewsPage /> },
         ],
