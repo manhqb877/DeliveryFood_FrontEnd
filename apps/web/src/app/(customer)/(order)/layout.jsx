@@ -11,7 +11,7 @@ export default function OrderLayout({ children }) {
   return (
     <div className="w-full min-h-screen bg-white font-sans flex flex-col">
       <OrderHeader />
-      <main className="flex-1 w-full flex flex-col relative z-0">
+      <main className="flex-1 w-full flex flex-col">
         {children}
       </main>
       <OrderFooter />

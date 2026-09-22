@@ -4,13 +4,20 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Package, MapPin, Truck, CheckCircle2, Clock, ChevronRight } from 'lucide-react';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 
-const API_GATEWAY = 'http://localhost:8080/api/v1';
+const ShipperTrackingMap = dynamic(
+  () => import('@/components/ShipperTrackingMap').then(mod => mod.ShipperTrackingMap),
+  { ssr: false, loading: () => <div className="w-full h-64 bg-slate-100 animate-pulse rounded-xl" /> }
+);
+
+const API_GATEWAY = 'http://192.168.100.151:8080/api/v1';
 
 export default function TrackingPage() {
   const [orderCode, setOrderCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState(null);
+  const [deliveryData, setDeliveryData] = useState(null);
   const [error, setError] = useState('');
   const router = useRouter();
 
@@ -29,6 +36,18 @@ export default function TrackingPage() {
       }
       const data = await res.json();
       setOrder(data);
+
+      try {
+        const delRes = await fetch(`${API_GATEWAY}/tracking/deliveries/order/${data.id}`);
+        if (delRes.ok) {
+          const delData = await delRes.json();
+          setDeliveryData(delData);
+        } else {
+          setDeliveryData(null);
+        }
+      } catch (e) {
+        console.warn('Could not fetch delivery data:', e);
+      }
     } catch (err) {
       setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
     } finally {
@@ -157,6 +176,20 @@ export default function TrackingPage() {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Vị trí Shipper (hiện khi đang lấy hàng hoặc đang giao) */}
+            {order.orderStatus !== 'CANCELLED' && ['PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'DELIVERING'].includes(order.orderStatus) && deliveryData?.shipperId && (
+              <div className="mb-12">
+                <h3 className="font-bold text-gray-900 mb-4 uppercase tracking-wide text-sm border-b pb-2">Định Vị Vị Trí Giao Hàng</h3>
+                <div className="h-64 md:h-96 w-full rounded-2xl overflow-hidden border border-gray-200 relative z-0 shadow-sm">
+                  <ShipperTrackingMap
+                    shipperId={deliveryData.shipperId}
+                    pickupLocation={{ lat: deliveryData.pickupLat || 10.7769, lng: deliveryData.pickupLng || 106.7009 }}
+                    deliveryLocation={{ lat: deliveryData.deliveryLat || 10.7800, lng: deliveryData.deliveryLng || 106.7050 }}
+                  />
                 </div>
               </div>
             )}

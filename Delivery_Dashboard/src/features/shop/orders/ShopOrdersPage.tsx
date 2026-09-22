@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { dbService } from '@/api/client';
 import { Order } from '@/api/mockData';
+import { ShipperTrackingMap } from '../../../components/ShipperTrackingMap';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
@@ -108,6 +109,7 @@ function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDeta
   const isNew = order.order_status === 'PLACED';
   const isPreparing = ['CONFIRMED', 'PREPARING'].includes(order.order_status);
   const isReady = order.order_status === 'READY_FOR_PICKUP';
+  const isDelivered = ['DELIVERED', 'COMPLETED'].includes(order.order_status);
   const isHistory = ['ASSIGNED', 'PICKED_UP', 'DELIVERING', 'DELIVERED', 'COMPLETED', 'CANCELLED'].includes(order.order_status);
 
   const cardClass = `
@@ -116,7 +118,8 @@ function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDeta
     ${isNew ? 'border-blue-300 shadow-blue-100' : ''}
     ${isPreparing ? 'border-amber-200 shadow-amber-50' : ''}
     ${isReady ? 'border-emerald-300 shadow-emerald-100' : ''}
-    ${isHistory && order.order_status !== 'CANCELLED' ? 'border-slate-200' : ''}
+    ${isDelivered ? 'border-green-300 shadow-green-50' : ''}
+    ${isHistory && !isDelivered && order.order_status !== 'CANCELLED' ? 'border-slate-200' : ''}
     ${order.order_status === 'CANCELLED' ? 'border-slate-200 opacity-70' : ''}
     hover:shadow-md
   `;
@@ -145,6 +148,14 @@ function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDeta
             <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
           </span>
           Đơn mới – cần xác nhận ngay!
+        </div>
+      )}
+
+      {/* Success banner for DELIVERED */}
+      {isDelivered && (
+        <div className="flex items-center gap-2 text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-2">
+          <span className="text-base">🎉</span>
+          <span>Giao hàng thành công! Shipper đã hoàn tất đơn.</span>
         </div>
       )}
 
@@ -287,6 +298,7 @@ export function ShopOrdersPage() {
   const [cancelModalOrder, setCancelModalOrder] = useState<Order | null>(null);
   const [cancelReasonInput, setCancelReasonInput] = useState('');
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
+  const [deliveryData, setDeliveryData] = useState<any>(null);
   const [lastPollTime, setLastPollTime] = useState<Date>(new Date());
   const [transitioning, setTransitioning] = useState<number | null>(null);
   const prevOrderIds = useRef<Set<number>>(new Set());
@@ -325,6 +337,26 @@ export function ShopOrdersPage() {
       channel?.close();
     };
   }, [loadOrders]);
+
+  // Fetch delivery data when detailOrder changes
+  useEffect(() => {
+    if (detailOrder && ['PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'DELIVERING'].includes(detailOrder.order_status)) {
+      fetch(`http://localhost:8080/api/v1/tracking/deliveries/order/${detailOrder.id}`)
+        .then(res => {
+          if (res.ok) return res.json();
+          return null;
+        })
+        .then(data => {
+          setDeliveryData(data?.data || data);
+        })
+        .catch(err => {
+          console.warn('Could not fetch delivery data:', err);
+          setDeliveryData(null);
+        });
+    } else {
+      setDeliveryData(null);
+    }
+  }, [detailOrder]);
 
   const handleUpdateStatus = async (
     orderId: number,
@@ -594,6 +626,20 @@ export function ShopOrdersPage() {
               <p className="font-bold text-slate-700 mb-2 text-[11px] uppercase tracking-wider">Hành Trình Đơn Hàng</p>
               <OrderStepper status={detailOrder.order_status} />
             </div>
+
+            {/* Vị trí Shipper (hiện khi đang giao hoặc lấy hàng) */}
+            {['PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'DELIVERING'].includes(detailOrder.order_status) && deliveryData?.shipperId && (
+              <div>
+                <p className="font-bold text-slate-700 mb-2 text-[11px] uppercase tracking-wider">Định Vị Shipper Real-Time</p>
+                <div className="h-64 md:h-80 w-full rounded-xl overflow-hidden border border-slate-200 shadow-sm relative z-0">
+                  <ShipperTrackingMap
+                    shipperId={deliveryData.shipperId}
+                    pickupLocation={{ lat: deliveryData.pickupLat || 10.7769, lng: deliveryData.pickupLng || 106.7009 }}
+                    deliveryLocation={{ lat: deliveryData.deliveryLat || 10.7800, lng: deliveryData.deliveryLng || 106.7050 }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Order info grid */}
             <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">

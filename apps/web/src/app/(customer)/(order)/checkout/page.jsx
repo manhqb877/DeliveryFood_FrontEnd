@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useId } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
@@ -28,6 +28,11 @@ export default function CheckoutPage() {
   const { carts } = useCart();
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  
   // COD payment method only (as required by user)
   const [paymentMethod, setPaymentMethod] = useState('COD');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -51,6 +56,8 @@ export default function CheckoutPage() {
   const [selectedWard, setSelectedWard] = useState('');
   const [streetAddress, setStreetAddress] = useState('');
   const [note, setNote] = useState('');
+  const [deliveryLat, setDeliveryLat] = useState(null);
+  const [deliveryLng, setDeliveryLng] = useState(null);
   
   // User info
   const [fullName, setFullName] = useState('');
@@ -60,6 +67,34 @@ export default function CheckoutPage() {
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [loadingAddr, setLoadingAddr] = useState(false);
+
+  // Autocomplete address
+  const [autocompleteResults, setAutocompleteResults] = useState([]);
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const searchTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    if (!streetAddress || streetAddress.length < 3 || !showAutocomplete) {
+      setAutocompleteResults([]);
+      return;
+    }
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    
+    searchTimeoutRef.current = setTimeout(() => {
+      setIsSearchingAddress(true);
+      fetch(`https://maps.vietmap.vn/api/autocomplete/v3?apikey=809bdd000025b62b0e9710b82e28f65f6178ee698cdb1845&text=${encodeURIComponent(streetAddress)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (Array.isArray(data)) setAutocompleteResults(data);
+          else setAutocompleteResults([]);
+        })
+        .catch(console.error)
+        .finally(() => setIsSearchingAddress(false));
+    }, 500);
+
+    return () => clearTimeout(searchTimeoutRef.current);
+  }, [streetAddress, showAutocomplete]);
 
   // Promotions & Vouchers (Separated into Shop Vouchers & System/Platform Vouchers)
   const [shopPromotions, setShopPromotions] = useState([]);
@@ -352,8 +387,8 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!selectedProv || !selectedDist || !selectedWard || !streetAddress) {
-      setErrorMessage('Vui lòng chọn và nhập đầy đủ địa chỉ giao hàng!');
+    if (!streetAddress) {
+      setErrorMessage('Vui lòng nhập địa chỉ giao hàng chi tiết!');
       return;
     }
     if (!fullName || !phone) {
@@ -369,7 +404,11 @@ export default function CheckoutPage() {
     const pName = provinces.find(p => p.code == selectedProv)?.name || '';
     const dName = districts.find(d => d.code == selectedDist)?.name || '';
     const wName = wards.find(w => w.code == selectedWard)?.name || '';
-    const fullAddress = `${streetAddress}, ${wName}, ${dName}, ${pName}`;
+    
+    let fullAddress = streetAddress;
+    if (wName && !fullAddress.includes(wName)) fullAddress += `, ${wName}`;
+    if (dName && !fullAddress.includes(dName)) fullAddress += `, ${dName}`;
+    if (pName && !fullAddress.includes(pName)) fullAddress += `, ${pName}`;
 
     setIsPlacingOrder(true);
     try {
@@ -390,7 +429,9 @@ export default function CheckoutPage() {
         fullAddress: fullAddress,
         recipientName: fullName,
         recipientPhone: phone,
-        note: note || ''
+        note: note || '',
+        latitude: deliveryLat,
+        longitude: deliveryLng
       };
 
       const appliedCodes = [selectedShopPromo?.code, selectedPlatformPromo?.code].filter(Boolean).join(', ') || null;
@@ -431,6 +472,8 @@ export default function CheckoutPage() {
   const totalItems = cartToOrder.items?.reduce((sum, i) => sum + i.quantity, 0) || 0;
 
   // Render require login screen if not authenticated
+  if (!isMounted) return null;
+
   if (!authLoading && !isAuthenticated) {
     return (
       <div className="bg-slate-50 min-h-screen py-16 px-4">
@@ -618,7 +661,7 @@ export default function CheckoutPage() {
                   {/* Province / District / Ward Dropdowns */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tỉnh / Thành phố *:</label>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tỉnh / Thành phố:</label>
                       <div className="relative">
                         <select 
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs outline-none focus:border-[#002B5E] appearance-none" 
@@ -633,7 +676,7 @@ export default function CheckoutPage() {
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Quận / Huyện *:</label>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Quận / Huyện:</label>
                       <div className="relative">
                         <select 
                           disabled={!selectedProv} 
@@ -649,7 +692,7 @@ export default function CheckoutPage() {
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Phường / Xã *:</label>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Phường / Xã:</label>
                       <div className="relative">
                         <select 
                           disabled={!selectedDist} 
@@ -667,13 +710,77 @@ export default function CheckoutPage() {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Địa chỉ chi tiết (Số nhà, tên đường, số phòng/tòa nhà) *:</label>
-                    <input 
-                      type="text" 
-                      placeholder="VD: Căn hộ S5.02 Tầng 12, Tòa S5 Vinhomes Grand Park" 
-                      value={streetAddress}
-                      onChange={e => setStreetAddress(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#002B5E] focus:bg-white transition-colors" 
-                    />
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder="VD: Căn hộ S5.02 Tầng 12, Tòa S5 Vinhomes Grand Park" 
+                        value={streetAddress}
+                        onChange={e => {
+                          setStreetAddress(e.target.value);
+                          setShowAutocomplete(true);
+                        }}
+                        onFocus={() => {
+                          if (streetAddress.length >= 3) setShowAutocomplete(true);
+                        }}
+                        onBlur={() => setTimeout(() => setShowAutocomplete(false), 200)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-[#002B5E] focus:bg-white transition-colors" 
+                      />
+                      
+                      {/* Autocomplete Dropdown */}
+                      {showAutocomplete && (isSearchingAddress || autocompleteResults.length > 0) && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                          {isSearchingAddress ? (
+                            <div className="p-3 text-xs text-slate-500 text-center">Đang tìm địa chỉ...</div>
+                          ) : (
+                            autocompleteResults.map((res, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                className="w-full text-left p-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors"
+                                onClick={() => {
+                                  const displayStr = res.display || res.name;
+                                  setStreetAddress(displayStr);
+                                  setShowAutocomplete(false);
+                                  
+                                  // Fetch Place Details to get coordinates and location parts
+                                  fetch(`https://maps.vietmap.vn/api/place/v3?apikey=809bdd000025b62b0e9710b82e28f65f6178ee698cdb1845&refid=${res.ref_id}`)
+                                    .then(r => r.json())
+                                    .then(place => {
+                                      if (place.lat) setDeliveryLat(place.lat);
+                                      if (place.lng) setDeliveryLng(place.lng);
+                                      
+                                      // Auto-map Province / District / Ward if possible
+                                      if (place.city) {
+                                        const norm = (s) => (s || '').toLowerCase().replace(/^(tỉnh|thành phố|quận|huyện|thị xã|phường|xã|thị trấn)\s+/g, '').trim();
+                                        const p = provinces.find(x => norm(x.name) === norm(place.city) || norm(x.name).includes(norm(place.city)) || norm(place.city).includes(norm(x.name)));
+                                        if (p) {
+                                          setSelectedProv(p.code);
+                                          fetchDistricts(p.code).then(dList => {
+                                            setDistricts(dList);
+                                            const d = dList.find(x => norm(x.name) === norm(place.district) || norm(x.name).includes(norm(place.district)) || norm(place.district).includes(norm(x.name)));
+                                            if (d) {
+                                              setSelectedDist(d.code);
+                                              fetchWards(d.code).then(wList => {
+                                                setWards(wList);
+                                                const w = wList.find(x => norm(x.name) === norm(place.ward) || norm(x.name).includes(norm(place.ward)) || norm(place.ward).includes(norm(x.name)));
+                                                if (w) setSelectedWard(w.code);
+                                              });
+                                            }
+                                          });
+                                        }
+                                      }
+                                    })
+                                    .catch(console.error);
+                                }}
+                              >
+                                <span className="block text-xs font-semibold text-slate-800">{res.name}</span>
+                                <span className="block text-[10px] text-slate-500 truncate mt-0.5">{res.display}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div>

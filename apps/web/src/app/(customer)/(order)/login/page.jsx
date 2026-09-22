@@ -38,6 +38,11 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // Tự động chuyển trang nếu đã đăng nhập từ trước
   useEffect(() => {
     if (isAuthenticated && !isSubmitting) {
@@ -288,7 +293,7 @@ export default function LoginPage() {
       <div className="flex-1 mx-auto w-full max-w-[520px] px-4 md:px-6 py-10">
         
         {/* Nếu đã đăng nhập thì hiển thị thông tin profile hiện tại */}
-        {isAuthenticated && user && (
+        {isMounted && isAuthenticated && user && (
           <div className="mb-6 p-4 rounded-xl border border-green-200 bg-green-50 text-center">
             <div className="flex justify-center items-center gap-2 text-green-700 font-bold mb-1">
               <CheckCircleIcon className="w-5 h-5" />

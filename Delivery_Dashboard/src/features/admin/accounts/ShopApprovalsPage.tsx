@@ -18,20 +18,66 @@ export function ShopApprovalsPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const data = await dbService.getShops();
-    setShops(data);
+    try {
+      const token = localStorage.getItem('hyperlocal_access_token');
+      const res = await fetch(`http://localhost:8080/api/v1/auth/admin/shops${statusFilter !== 'ALL' ? `?status=${statusFilter}` : ''}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const result = await res.json();
+        // Cần map response data từ API thành dạng ShopProfile
+        const apiShops = result.data || [];
+        const mappedShops: ShopProfile[] = apiShops.map((s: any) => ({
+          id: s.id,
+          owner_id: s.ownerId || 0,
+          owner_name: s.ownerName || 'Chưa cập nhật',
+          area_id: s.areaId || 1,
+          area_name: s.areaName || 'Khu vực chung',
+          shop_name: s.shopName,
+          shop_description: s.shopDescription || '',
+          location_detail: s.locationDetail || '',
+          phone: s.phone || '',
+          logo_url: s.logoUrl || 'https://via.placeholder.com/150',
+          cover_image_url: s.coverImageUrl || 'https://via.placeholder.com/600x300',
+          documents: s.documents ? s.documents.map((d: any) => d.url) : [],
+          approval_status: s.approvalStatus,
+          rejection_reason: s.rejectionReason,
+          is_open: s.isOpen || false,
+          is_accepting_orders: s.isAcceptingOrders || false,
+          created_at: s.createdAt || new Date().toISOString()
+        }));
+        setShops(mappedShops);
+      } else {
+        setShops([]);
+      }
+    } catch (e) {
+      console.error(e);
+      setShops([]);
+    }
     setLoading(false);
   };
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [statusFilter]);
 
   const handleApprove = async (shop: ShopProfile) => {
     if (confirm(`Bạn có chắc chắn muốn DUYỆT cho gian hàng "${shop.shop_name}" hoạt động?`)) {
-      await dbService.approveShop(shop.id, true);
-      alert('Đã duyệt gian hàng thành công!');
-      loadData();
+      try {
+        const token = localStorage.getItem('hyperlocal_access_token');
+        await fetch(`http://localhost:8080/api/v1/auth/admin/shops/${shop.id}/approve`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+          },
+          body: JSON.stringify({ approved: true })
+        });
+        alert('Đã duyệt gian hàng thành công!');
+        loadData();
+      } catch (e) {
+        alert('Lỗi khi duyệt gian hàng');
+      }
     }
   };
 
@@ -41,14 +87,27 @@ export function ShopApprovalsPage() {
       alert('Vui lòng nhập lý do từ chối gian hàng!');
       return;
     }
-    await dbService.approveShop(rejectModalShop.id, false, rejectionReason);
-    alert(`Đã từ chối gian hàng "${rejectModalShop.shop_name}".`);
-    setRejectModalShop(null);
-    setRejectionReason('');
-    loadData();
+    try {
+      const token = localStorage.getItem('hyperlocal_access_token');
+      await fetch(`http://localhost:8080/api/v1/auth/admin/shops/${rejectModalShop.id}/approve`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ approved: false, rejectionReason: rejectionReason.trim() })
+      });
+      alert(`Đã từ chối gian hàng "${rejectModalShop.shop_name}".`);
+      setRejectModalShop(null);
+      setRejectionReason('');
+      loadData();
+    } catch (e) {
+      alert('Lỗi khi từ chối gian hàng');
+    }
   };
 
-  const filteredShops = shops.filter((s) => statusFilter === 'ALL' || s.approval_status === statusFilter);
+  // Not filtering here because we fetch by status directly from API
+  const filteredShops = shops;
 
   return (
     <div className="space-y-6">

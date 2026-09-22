@@ -5,20 +5,28 @@ import { Table, Column } from '@/components/ui/Table';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
-import { Bike, Check, X, Eye, FileText } from 'lucide-react';
+import { Bike, Check, X, Eye, FileText, AlertCircle } from 'lucide-react';
 
 export function ShipperApprovalsPage() {
   const [shippers, setShippers] = useState<ShipperProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('PENDING');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [selectedShipper, setSelectedShipper] = useState<ShipperProfile | null>(null);
 
   const loadData = async () => {
     setLoading(true);
-    const data = await dbService.getShippers();
-    setShippers(data);
-    setLoading(false);
+    setErrorMsg(null);
+    try {
+      const data = await dbService.getShippers();
+      setShippers(data);
+    } catch (e: any) {
+      console.error(e);
+      setErrorMsg(e.message || 'Không thể tải dữ liệu Shipper');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -35,6 +43,22 @@ export function ShipperApprovalsPage() {
   };
 
   const filteredShippers = shippers.filter((s) => statusFilter === 'ALL' || s.approval_status === statusFilter);
+
+  if (loading) {
+    return <div className="p-8 text-center"><span className="loading text-blue-600">Đang tải danh sách tài xế...</span></div>;
+  }
+
+  if (errorMsg) {
+    return (
+      <div className="p-8 text-center">
+        <div className="bg-red-50 border border-red-200 text-red-600 rounded-lg p-6 inline-block max-w-lg">
+          <AlertCircle className="w-8 h-8 mx-auto mb-2 text-red-500" />
+          <h3 className="font-bold text-lg mb-1">Đã có lỗi xảy ra</h3>
+          <p className="text-sm">{errorMsg}</p>
+        </div>
+      </div>
+    );
+  }
 
   const columns: Column<ShipperProfile>[] = [
     {
@@ -74,7 +98,7 @@ export function ShipperApprovalsPage() {
       header: 'Khu vực đăng ký',
       cell: (s) => (
         <span className="text-xs text-slate-600 font-medium">
-          {s.registered_area_ids.map((id) => `Khu #${id}`).join(', ')}
+          {(s.registered_area_ids || []).map((id) => `Khu #${id}`).join(', ')}
         </span>
       ),
     },

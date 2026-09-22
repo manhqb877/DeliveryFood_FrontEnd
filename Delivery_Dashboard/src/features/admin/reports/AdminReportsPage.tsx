@@ -46,12 +46,42 @@ export function AdminReportsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [shopsList, ordersList] = await Promise.all([
-        dbService.getShops(),
+      const token = localStorage.getItem('hyperlocal_access_token');
+      
+      const [shopsRes, ordersRes] = await Promise.all([
+        fetch('http://localhost:8080/api/v1/auth/admin/shops', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
         dbService.getAllOrders(),
       ]);
+      
+      let shopsList = [];
+      if (shopsRes.ok) {
+        const shopsData = await shopsRes.json();
+        const apiShops = shopsData.data || [];
+        shopsList = apiShops.map((s: any) => ({
+          id: s.id,
+          owner_id: s.ownerId || 0,
+          owner_name: s.ownerName || 'Chưa cập nhật',
+          area_id: s.areaId || 1,
+          area_name: s.areaName || 'Khu vực chung',
+          shop_name: s.shopName,
+          shop_description: s.shopDescription || '',
+          location_detail: s.locationDetail || '',
+          phone: s.phone || '',
+          logo_url: s.logoUrl || 'https://via.placeholder.com/150',
+          cover_image_url: s.coverImageUrl || 'https://via.placeholder.com/600x300',
+          documents: s.documents ? s.documents.map((d: any) => d.url) : [],
+          approval_status: s.approvalStatus,
+          rejection_reason: s.rejectionReason,
+          is_open: s.isOpen || false,
+          is_accepting_orders: s.isAcceptingOrders || false,
+          created_at: s.createdAt || new Date().toISOString()
+        }));
+      }
+
       setShops(shopsList.length > 0 ? shopsList : initialShops);
-      setOrders(ordersList.length > 0 ? ordersList : initialOrders);
+      setOrders(ordersRes.length > 0 ? ordersRes : initialOrders);
     } catch (err) {
       console.error('Error fetching admin reports data:', err);
       setShops(initialShops);
