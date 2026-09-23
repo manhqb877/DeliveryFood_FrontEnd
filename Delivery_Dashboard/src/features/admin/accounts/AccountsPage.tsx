@@ -56,7 +56,7 @@ export function AccountsPage() {
   const filteredUsers = users.filter((u) => {
     const searchLower = search.toLowerCase();
     const phoneStr = u.phone || '';
-    const nameStr = u.full_name || '';
+    const nameStr = u.full_name || (u as any).fullName || '';
     
     const matchSearch =
       phoneStr.includes(search) || nameStr.toLowerCase().includes(searchLower);
@@ -79,7 +79,7 @@ export function AccountsPage() {
       header: 'Họ và tên',
       cell: (u) => (
         <div>
-          <p className="font-semibold text-slate-800">{u.full_name}</p>
+          <p className="font-semibold text-slate-800">{u.full_name || (u as any).fullName || 'Người dùng'}</p>
           <p className="text-[11px] text-slate-400">{u.email || 'Chưa cập nhật email'}</p>
         </div>
       ),
@@ -106,15 +106,26 @@ export function AccountsPage() {
     },
     {
       header: 'Khu vực ID',
-      cell: (u) => (
-        <span className="text-xs text-slate-600 font-medium">
-          {u.area_id ? `Khu #${u.area_id} ${u.is_area_verified ? '✓ (Đã duyệt)' : ''}` : 'Chưa gán'}
-        </span>
-      ),
+      cell: (u) => {
+        const areaId = u.area_id || (u as any).areaId;
+        const isVerified = u.is_area_verified ?? (u as any).isAreaVerified;
+        return (
+          <span className="text-xs text-slate-600 font-medium">
+            {areaId ? `Khu #${areaId} ${isVerified ? '✓ (Đã duyệt)' : ''}` : 'Chưa gán'}
+          </span>
+        );
+      },
     },
     {
       header: 'Ngày tạo',
-      cell: (u) => <span className="text-xs text-slate-500">{new Date(u.created_at).toLocaleDateString('vi-VN')}</span>,
+      cell: (u) => {
+        const rawDate = u.created_at || (u as any).createdAt;
+        return (
+          <span className="text-xs text-slate-500">
+            {rawDate ? new Date(rawDate).toLocaleDateString('vi-VN') : '—'}
+          </span>
+        );
+      },
     },
     {
       header: 'Hành động',
@@ -221,7 +232,7 @@ export function AccountsPage() {
             <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
               <div>
                 <p className="text-slate-400 font-medium">Họ và tên:</p>
-                <p className="font-semibold text-slate-800 text-sm mt-0.5">{selectedUser.full_name}</p>
+                <p className="font-semibold text-slate-800 text-sm mt-0.5">{selectedUser.full_name || (selectedUser as any).fullName || 'Người dùng'}</p>
               </div>
               <div>
                 <p className="text-slate-400 font-medium">Email:</p>
@@ -238,13 +249,13 @@ export function AccountsPage() {
               <div>
                 <p className="text-slate-400 font-medium">Khu vực xác thực:</p>
                 <p className="font-semibold text-slate-800 mt-0.5">
-                  {selectedUser.area_id ? `Khu #${selectedUser.area_id}` : 'Chưa xác thực'}
+                  {(selectedUser.area_id || (selectedUser as any).areaId) ? `Khu #${selectedUser.area_id || (selectedUser as any).areaId}` : 'Chưa xác thực'}
                 </p>
               </div>
               <div>
                 <p className="text-slate-400 font-medium">Ngày khởi tạo:</p>
                 <p className="font-semibold text-slate-800 mt-0.5">
-                  {new Date(selectedUser.created_at).toLocaleString('vi-VN')}
+                  {(selectedUser.created_at || (selectedUser as any).createdAt) ? new Date(selectedUser.created_at || (selectedUser as any).createdAt).toLocaleString('vi-VN') : '—'}
                 </p>
               </div>
             </div>
