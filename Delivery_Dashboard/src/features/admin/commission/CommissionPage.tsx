@@ -102,8 +102,9 @@ export function CommissionPage() {
   };
 
   // Summary stats
-  const avgRate = configs.length > 0
-    ? (configs.reduce((s, c) => s + c.rate, 0) / configs.length).toFixed(1)
+  const percentConfigs = configs.filter(c => c.commission_type === 'PERCENT');
+  const avgRate = percentConfigs.length > 0
+    ? (percentConfigs.reduce((s, c) => s + c.rate, 0) / percentConfigs.length).toFixed(1)
     : '0';
   const percentCount = configs.filter(c => c.commission_type === 'PERCENT').length;
   const fixedCount = configs.filter(c => c.commission_type === 'FIXED_PER_ORDER').length;

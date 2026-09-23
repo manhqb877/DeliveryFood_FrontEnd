@@ -180,7 +180,7 @@ export function ReconciliationPage() {
             </thead>
             <tbody>
               {filtered.map(r => {
-                const isConfirmed = r.reconcile_status === 'CONFIRMED';
+                const isConfirmed = r.status === 'CONFIRMED' || r.status === 'COMPLETED' || r.reconcile_status === 'CONFIRMED';
                 return (
                   <tr key={r.id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${isConfirmed ? 'opacity-60' : ''}`}>
                     <td className="p-4">
@@ -193,18 +193,18 @@ export function ReconciliationPage() {
                       />
                     </td>
                     <td className="p-4">
-                      <span className="font-mono text-blue-600 font-bold text-xs">{r.order_code}</span>
+                      <span className="font-mono text-blue-600 font-bold text-xs">{r.orderCode || r.order_code}</span>
                     </td>
                     <td className="p-4">
                       <div>
-                        <p className="font-semibold text-slate-800">{r.shipper_name}</p>
-                        <p className="text-xs text-slate-400">ID #{r.shipper_id}</p>
+                        <p className="font-semibold text-slate-800">{r.shipperName || r.shipper_name}</p>
+                        <p className="text-xs text-slate-400">ID #{r.shipperId || r.shipper_id}</p>
                       </div>
                     </td>
                     <td className="p-4">
                       <div>
-                        <p className="font-semibold text-slate-800">{r.shop_name}</p>
-                        <p className="text-xs text-slate-400">ID #{r.shop_id}</p>
+                        <p className="font-semibold text-slate-800">{r.shopName || r.shop_name}</p>
+                        <p className="text-xs text-slate-400">ID #{r.shopId || r.shop_id}</p>
                       </div>
                     </td>
                     <td className="p-4 text-right">
@@ -224,8 +224,8 @@ export function ReconciliationPage() {
                       )}
                     </td>
                     <td className="p-4 text-xs text-slate-500">
-                      <div>{new Date(r.created_at).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' })}</div>
-                      <div className="text-slate-400">{new Date(r.created_at).toLocaleTimeString('vi-VN', { hour:'2-digit', minute:'2-digit' })}</div>
+                      <div>{new Date(r.createdAt || r.created_at).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' })}</div>
+                      <div className="text-slate-400">{new Date(r.createdAt || r.created_at).toLocaleTimeString('vi-VN', { hour:'2-digit', minute:'2-digit' })}</div>
                     </td>
                   </tr>
                 );

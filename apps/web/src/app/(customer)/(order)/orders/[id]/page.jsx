@@ -418,7 +418,7 @@ export default function OrderDetailsPage() {
             </div>
 
             {/* Đánh giá Shipper */}
-            {order.shipperId && (
+            {deliveryData?.shipperId && (
               <div className="mb-6 border-t pt-4">
                 <h4 className="font-bold text-gray-800 mb-2 text-sm">Tài xế giao hàng</h4>
                 <div className="flex items-center gap-1 mb-3">

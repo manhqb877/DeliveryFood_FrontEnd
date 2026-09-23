@@ -1189,62 +1189,149 @@ export const dbService = {
   },
 
   // COMPLAINTS
-  getComplaints: async () => getStored<Complaint[]>(STORAGE_KEYS.COMPLAINTS, initialComplaints),
+  getComplaints: async () => { 
+    try { 
+      const res = await fetch(`http://localhost:8080/api/v1/reviews/admin/all`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}` }}); 
+      if (res.ok) { 
+        const json = await res.json(); 
+        const arr = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []); 
+        return arr.map((d: any) => ({
+          id: d.id,
+          complainant_name: d.userId ? `User ID #${d.userId}` : 'Khách vãng lai',
+          order_code: d.orderId ? `ORDER-${d.orderId}` : '---',
+          created_at: d.createdAt,
+          description: d.shipperComment || d.shopComment || 'Không có bình luận',
+          shipper_rating: d.shipperRating,
+          shipper_id: d.shipperId,
+          shop_id: d.shopId,
+          shop_rating: d.shopRating,
+          shop_comment: d.shopComment,
+          image_urls: d.imageUrls
+        }));
+      } 
+    } catch(e){} 
+    return []; 
+  },
   resolveComplaint: async (id: number, resolution: string, status: Complaint['status']) => {
-    const list = getStored<Complaint[]>(STORAGE_KEYS.COMPLAINTS, initialComplaints);
-    const updated = list.map(c => c.id === id ? { ...c, resolution, status, resolved_at: new Date().toISOString() } : c);
-    setStored(STORAGE_KEYS.COMPLAINTS, updated);
-    return updated;
+    try { await fetch(`http://localhost:8080/api/v1/orders/admin/complaints/${id}/resolve?resolution=${resolution}`, { method: 'POST', headers: { 'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}` }}); } catch(e){}
+    return [];
   },
 
-  // FRAUD ALERTS
-  getFraudAlerts: async () => getStored<FraudAlert[]>(STORAGE_KEYS.FRAUD_ALERTS, initialFraudAlerts),
+  // ANALYTICS & FRAUD
+  getFraudAlerts: async () => {
+    try { 
+      const res = await fetch(`http://localhost:8080/api/v1/analytics/admin/fraud-alerts`, { 
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}` }
+      }); 
+      if (res.ok) { 
+        const json = await res.json(); 
+        const arr = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []); 
+        return arr.map((d: any) => ({
+          id: d.id,
+          alert_type: d.alertType,
+          severity: d.severity,
+          affected_user_id: d.userId,
+          guest_session_id: d.guestSessionId,
+          description: d.description,
+          status: d.status,
+          created_at: d.createdAt,
+          ip_address: d.ipAddress
+        }));
+      } 
+    } catch(e){}
+    return [];
+  },
   reviewFraudAlert: async (id: string, status: FraudAlert['status'], note?: string) => {
-    const list = getStored<FraudAlert[]>(STORAGE_KEYS.FRAUD_ALERTS, initialFraudAlerts);
-    const updated = list.map(a => a.id === id ? { ...a, status, review_note: note } : a);
-    setStored(STORAGE_KEYS.FRAUD_ALERTS, updated);
-    return updated;
+    try { await fetch(`http://localhost:8080/api/v1/analytics/admin/fraud-alerts/${id}/review`, { method: 'POST', headers: { 'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}`, 'Content-Type': 'application/json' }, body: JSON.stringify({status, note})}); } catch(e){}
+    return [];
   },
 
   // COMMISSIONS & COD & TRANSACTIONS
   getCommissionConfigs: async () => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${API_HOST}:8080/api/v1/commission-configs/admin/all`, {
+      const res = await fetch(`http://localhost:8080/api/v1/commission-configs/admin/all`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        return await res.json();
+        const json = await res.json();
+        const arr = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+        return arr.map((d: any) => ({
+          id: d.id,
+          shop_id: d.shopId || d.shop_id,
+          area_id: d.areaId || d.area_id,
+          commission_type: d.commissionType || d.commission_type,
+          rate: d.rate,
+          valid_from: d.validFrom || d.valid_from,
+          valid_to: d.validTo || d.valid_to
+        }));
       }
     } catch(e) {}
     return [];
   },
-  saveCommissionConfig: async (config: Partial<CommissionConfig>) => {
-    const list = getStored<CommissionConfig[]>(STORAGE_KEYS.COMMISSIONS, initialCommissionConfigs);
-    const newEntry: CommissionConfig = {
-      id: Date.now(),
-      shop_id: config.shop_id,
-      shop_name: config.shop_name,
-      area_id: config.area_id,
-      area_name: config.area_name,
-      commission_type: config.commission_type || 'PERCENT',
-      rate: config.rate || 10,
-      valid_from: new Date().toISOString()
-    };
-    const updated = [...list, newEntry];
-    setStored(STORAGE_KEYS.COMMISSIONS, updated);
-    return updated;
+  saveCommissionConfig: async (config: any) => {
+    try {
+      const payload = {
+        shopId: config.shop_id,
+        shopName: config.shop_name,
+        areaId: config.area_id,
+        areaName: config.area_name,
+        commissionType: config.commission_type,
+        rate: config.rate,
+        validFrom: config.valid_from
+      };
+      await fetch(`http://localhost:8080/api/v1/commission-configs/admin`, { 
+        method: 'POST', 
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}`, 
+          'Content-Type': 'application/json' 
+        }, 
+        body: JSON.stringify(payload)
+      }); 
+    } catch(e){}
+    return [];
+  },
+  updateCommissionConfig: async (id: number, config: any) => {
+    try {
+      const payload = {
+        shopId: config.shop_id,
+        shopName: config.shop_name,
+        areaId: config.area_id,
+        areaName: config.area_name,
+        commissionType: config.commission_type,
+        rate: config.rate,
+        validFrom: config.valid_from
+      };
+      await fetch(`http://localhost:8080/api/v1/commission-configs/admin/${id}`, { 
+        method: 'PUT', 
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}`, 
+          'Content-Type': 'application/json' 
+        }, 
+        body: JSON.stringify(payload)
+      }); 
+    } catch(e){}
+    return [];
+  },
+  deleteCommissionConfig: async (id: number) => {
+    try {
+      await fetch(`http://localhost:8080/api/v1/commission-configs/admin/${id}`, { 
+        method: 'DELETE', 
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}`
+        }
+      }); 
+    } catch(e){}
+    return [];
   },
 
-  getCodRecords: async () => getStored<CodRecord[]>(STORAGE_KEYS.COD_RECORDS, initialCodRecords),
+  getCodRecords: async () => { try { const res = await fetch(`http://localhost:8080/api/v1/remittances/admin/all`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}` }}); if (res.ok) { const json = await res.json(); return Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []); } } catch(e){} return []; },
   reconcileCodBulk: async (ids: number[]) => {
-    const list = getStored<CodRecord[]>(STORAGE_KEYS.COD_RECORDS, initialCodRecords);
-    const updated = list.map(c => ids.includes(c.id) ? { ...c, reconcile_status: 'CONFIRMED' as const } : c);
-    setStored(STORAGE_KEYS.COD_RECORDS, updated);
-    return updated;
+    try { await fetch(`http://localhost:8080/api/v1/orders/admin/remittances/reconcile-bulk`, { method: 'POST', headers: { 'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ids})}); } catch(e){}
+    return [];
   },
 
-  getTransactions: async () => getStored<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, initialTransactions),
+  getTransactions: async () => { try { const res = await fetch(`http://localhost:8080/api/v1/payment/admin/transactions`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}` }}); if (res.ok) { const json = await res.json(); return Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []); } } catch(e){} return []; },
 
   // PROMOTIONS (M-SHOP-05 & M-ADM-05 Anti-Abuse)
   getPromotions: async (scope?: 'PLATFORM' | 'SHOP', shopId?: number) => {
@@ -1596,13 +1683,11 @@ export const dbService = {
 
   // REVENUE & SETTLEMENT & PAYOUT (M-SHOP-04)
   getPayoutSchedules: async (): Promise<PlatformPayoutSchedule[]> => {
-    return getStored<PlatformPayoutSchedule[]>(STORAGE_KEYS.PAYOUT_SCHEDULES, initialPayoutSchedules);
+    try { const res = await fetch(`http://localhost:8080/api/v1/payment/admin/payout-schedules`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}` }}); if (res.ok) { const json = await res.json(); return Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []); } } catch(e){} return [];
   },
 
   getCommissionRecords: async (period?: string): Promise<CommissionRecord[]> => {
-    const list = getStored<CommissionRecord[]>(STORAGE_KEYS.COMMISSION_RECORDS, initialCommissionRecords);
-    if (period && period !== 'ALL') return list.filter(r => r.settlement_period === period);
-    return list;
+    try { const res = await fetch(`http://localhost:8080/api/v1/payment/admin/commission-records`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}` }}); if (res.ok) { const json = await res.json(); return Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []); } } catch(e){} return [];
   },
 
   // REVIEWS (M-SHOP-05)
@@ -1634,9 +1719,7 @@ export const dbService = {
     } catch (e) {
       console.warn('Backend order-service reviews unreachable, using local storage');
     }
-    const list = getStored<Review[]>(STORAGE_KEYS.REVIEWS, initialReviews);
-    if (shopId) return list.filter(r => r.shop_id === shopId);
-    return list;
+    return [];
   },
 
   replyReview: async (reviewId: number, shopReply: string) => {
@@ -1649,10 +1732,7 @@ export const dbService = {
     } catch (e) {
       console.warn('Backend order-service review reply unreachable, using local storage');
     }
-    const list = getStored<Review[]>(STORAGE_KEYS.REVIEWS, initialReviews);
-    const updated = list.map(r => r.id === reviewId ? { ...r, shop_reply: shopReply, shop_replied_at: new Date().toISOString() } : r);
-    setStored(STORAGE_KEYS.REVIEWS, updated);
-    return updated;
+    return [];
   },
   addBulkCategoryOption: async (categoryId: number, optionData: any) => {
     try {
