@@ -139,7 +139,7 @@ export const dbService = {
   getUsers: async () => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${import.meta.env.VITE_API_IP || '192.168.100.151'}:8080/api/v1/auth/admin/users`, {
+      const res = await fetch(`http://localhost:8080/api/v1/auth/admin/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -154,7 +154,7 @@ export const dbService = {
   updateUserStatus: async (userId: number, status: User['status']) => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${import.meta.env.VITE_API_IP || '192.168.100.151'}:8080/api/v1/auth/admin/users/${userId}/status?status=${status}`, {
+      const res = await fetch(`http://localhost:8080/api/v1/auth/admin/users/${userId}/status?status=${status}`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -170,7 +170,7 @@ export const dbService = {
   resetUserPassword: async (userId: number, newPassword: string) => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${import.meta.env.VITE_API_IP || '192.168.100.151'}:8080/api/v1/auth/admin/users/${userId}/reset-password`, {
+      const res = await fetch(`http://localhost:8080/api/v1/auth/admin/users/${userId}/reset-password`, {
         method: 'PUT',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -194,7 +194,7 @@ export const dbService = {
     // 1. Try /api/v1/auth/shops/me if token exists
     if (token) {
       try {
-        const res = await fetch('http://192.168.100.151:8080/api/v1/auth/shops/me', {
+        const res = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -206,7 +206,7 @@ export const dbService = {
       } catch (err) {
         console.warn('Could not fetch /shops/me from gateway, trying 8081 directly:', err);
         try {
-          const directRes = await fetch('http://192.168.100.151:8081/api/v1/auth/shops/me', {
+          const directRes = await fetch('http://localhost:8081/api/v1/auth/shops/me', {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (directRes.ok) {
@@ -222,7 +222,7 @@ export const dbService = {
     // 2. Try fetching from /api/v1/core/shops and match by ownerId or userId
     if (currentUser?.id) {
       try {
-        const res = await fetch('http://192.168.100.151:8080/api/v1/core/shops');
+        const res = await fetch('http://localhost:8080/api/v1/core/shops');
         if (res.ok) {
           const shopsList = await res.json();
           if (Array.isArray(shopsList)) {
@@ -239,7 +239,7 @@ export const dbService = {
 
     // 3. Fallback to first shop in real backend
     try {
-      const res = await fetch('http://192.168.100.151:8080/api/v1/core/shops');
+      const res = await fetch('http://localhost:8080/api/v1/core/shops');
       if (res.ok) {
         const shopsList = await res.json();
         if (Array.isArray(shopsList) && shopsList.length > 0) {
@@ -259,7 +259,7 @@ export const dbService = {
   },
   getShops: async (): Promise<ShopProfile[]> => {
     try {
-      const res = await fetch('http://192.168.100.151:8080/api/v1/core/shops');
+      const res = await fetch('http://localhost:8080/api/v1/core/shops');
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
@@ -273,7 +273,7 @@ export const dbService = {
   },
   getShopById: async (id: number): Promise<ShopProfile> => {
     try {
-      const res = await fetch(`http://192.168.100.151:8080/api/v1/core/shops/${id}/details`);
+      const res = await fetch(`http://localhost:8080/api/v1/core/shops/${id}/details`);
       if (res.ok) {
         const data = await res.json();
         if (data) return mapBackendShopToProfile(data);
@@ -421,7 +421,7 @@ export const dbService = {
     const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
     if (token) {
       try {
-        const res = await fetch('http://192.168.100.151:8080/api/v1/auth/shops/me', {
+        const res = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -460,7 +460,7 @@ export const dbService = {
     const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
     if (token) {
       try {
-        await fetch(`http://192.168.100.151:8080/api/v1/auth/shops/me/open?isOpen=${isOpen}`, {
+        await fetch(`http://localhost:8080/api/v1/auth/shops/me/open?isOpen=${isOpen}`, {
           method: 'PATCH',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -477,7 +477,7 @@ export const dbService = {
     const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
     if (token) {
       try {
-        await fetch(`http://192.168.100.151:8080/api/v1/auth/shops/me/accepting?isAcceptingOrders=${isAcceptingOrders}`, {
+        await fetch(`http://localhost:8080/api/v1/auth/shops/me/accepting?isAcceptingOrders=${isAcceptingOrders}`, {
           method: 'PATCH',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -495,7 +495,7 @@ export const dbService = {
   getShippers: async (): Promise<ShipperProfile[]> => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${import.meta.env.VITE_API_IP || '192.168.100.151'}:8080/api/v1/auth/shippers`, {
+      const res = await fetch(`http://localhost:8080/api/v1/auth/shippers`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -512,7 +512,7 @@ export const dbService = {
   approveShipper: async (shipperId: number, approved: boolean, reason?: string) => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${import.meta.env.VITE_API_IP || '192.168.100.151'}:8080/api/v1/auth/shippers/${shipperId}/approve?approved=${approved}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`, {
+      const res = await fetch(`http://localhost:8080/api/v1/auth/shippers/${shipperId}/approve?approved=${approved}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -593,7 +593,7 @@ export const dbService = {
       let targetShopId = shopId;
       const token = localStorage.getItem('hyperlocal_access_token');
       if (token) {
-        const meRes = await fetch('http://192.168.100.151:8080/api/v1/auth/shops/me', {
+        const meRes = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (meRes.ok) {
@@ -604,7 +604,7 @@ export const dbService = {
         }
       }
       
-      const res = await fetch(`http://192.168.100.151:8080/api/v1/core/categories/shop/${targetShopId}`);
+      const res = await fetch(`http://localhost:8080/api/v1/core/categories/shop/${targetShopId}`);
       if (res.ok) {
         const json = await res.json();
         if (json.data) {
@@ -620,8 +620,8 @@ export const dbService = {
     try {
       const isUpdate = !!category.id;
       const url = isUpdate 
-        ? `http://192.168.100.151:8080/api/v1/core/categories/${category.id}` 
-        : `http://192.168.100.151:8080/api/v1/core/categories`;
+        ? `http://localhost:8080/api/v1/core/categories/${category.id}` 
+        : `http://localhost:8080/api/v1/core/categories`;
       const method = isUpdate ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -641,7 +641,7 @@ export const dbService = {
   },
   deleteCategory: async (id: number) => {
     try {
-      const res = await fetch(`http://192.168.100.151:8080/api/v1/core/categories/${id}`, {
+      const res = await fetch(`http://localhost:8080/api/v1/core/categories/${id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -659,7 +659,7 @@ export const dbService = {
       let targetShopId = shopId;
       const token = localStorage.getItem('hyperlocal_access_token');
       if (token) {
-        const meRes = await fetch('http://192.168.100.151:8080/api/v1/auth/shops/me', {
+        const meRes = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (meRes.ok) {
@@ -670,7 +670,7 @@ export const dbService = {
         }
       }
 
-      const res = await fetch(`http://192.168.100.151:8080/api/v1/core/shops/${targetShopId}/details`);
+      const res = await fetch(`http://localhost:8080/api/v1/core/shops/${targetShopId}/details`);
       if (res.ok) {
         const data = await res.json();
         if (data && data.categories) {
@@ -713,7 +713,7 @@ export const dbService = {
   },
   toggleItemStatus: async (itemId: number, newStatus: Item['status']) => {
     try {
-      const res = await fetch(`http://192.168.100.151:8080/api/v1/core/items/${itemId}`, {
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
@@ -732,7 +732,7 @@ export const dbService = {
   },
   deleteItem: async (itemId: number) => {
     try {
-      const url = `http://192.168.100.151:8080/api/v1/core/items/${itemId}`;
+      const url = `http://localhost:8080/api/v1/core/items/${itemId}`;
       await fetch(url, {
         method: "DELETE",
       });
@@ -745,8 +745,8 @@ export const dbService = {
     try {
       const isUpdate = !!item.id;
       const url = isUpdate 
-        ? `http://192.168.100.151:8080/api/v1/core/items/${item.id}`
-        : `http://192.168.100.151:8080/api/v1/core/items`;
+        ? `http://localhost:8080/api/v1/core/items/${item.id}`
+        : `http://localhost:8080/api/v1/core/items`;
       const method = isUpdate ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -843,7 +843,7 @@ export const dbService = {
   // ITEM OPTIONS
   getItemOptions: async (itemId: number) => {
     try {
-      const res = await fetch(`http://192.168.100.151:8080/api/v1/core/items/${itemId}/options`);
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/${itemId}/options`);
       if (res.ok) {
         const list = await res.json();
         return list.map((o: any) => ({
@@ -866,7 +866,7 @@ export const dbService = {
   },
   getSuggestedOptionsByCategory: async (categoryId: number) => {
     try {
-      const res = await fetch(`http://192.168.100.151:8080/api/v1/core/items/category/${categoryId}/suggested-options`);
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/category/${categoryId}/suggested-options`);
       if (res.ok) {
         const body = await res.json();
         const arr = Array.isArray(body) ? body : (body?.data && Array.isArray(body.data) ? body.data : []);
@@ -885,7 +885,7 @@ export const dbService = {
   },
   saveItemOption: async (option: Partial<ItemOption>) => {
     try {
-      const url = `http://192.168.100.151:8080/api/v1/core/items/${option.item_id}/options`;
+      const url = `http://localhost:8080/api/v1/core/items/${option.item_id}/options`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -928,7 +928,7 @@ export const dbService = {
   },
   deleteItemOption: async (id: number) => {
     try {
-      await fetch(`http://192.168.100.151:8080/api/v1/core/items/options/${id}`, { method: 'DELETE' });
+      await fetch(`http://localhost:8080/api/v1/core/items/options/${id}`, { method: 'DELETE' });
     } catch (e) {
       console.warn('Failed to delete option from backend', e);
     }
@@ -945,7 +945,7 @@ export const dbService = {
       const token = localStorage.getItem('hyperlocal_access_token');
       if (!targetShopId && token) {
         try {
-          const meRes = await fetch('http://192.168.100.151:8080/api/v1/auth/shops/me', {
+          const meRes = await fetch('http://localhost:8080/api/v1/auth/shops/me', {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (meRes.ok) {
@@ -958,7 +958,7 @@ export const dbService = {
       }
 
       if (targetShopId) {
-        const res = await fetch(`http://192.168.100.151:8080/api/v1/orders/shop/${targetShopId}`);
+        const res = await fetch(`http://localhost:8080/api/v1/orders/shop/${targetShopId}`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {
@@ -1029,7 +1029,7 @@ export const dbService = {
   },
   getAllOrders: async (): Promise<Order[]> => {
     try {
-      const res = await fetch('http://192.168.100.151:8080/api/v1/orders/admin/all');
+      const res = await fetch('http://localhost:8080/api/v1/orders/admin/all');
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -1093,7 +1093,7 @@ export const dbService = {
 
   updateOrderStatus: async (orderId: number, newStatus: Order['order_status'], actor: string, reason?: string) => {
     try {
-      await fetch(`http://192.168.100.151:8080/api/v1/orders/${orderId}/status`, {
+      await fetch(`http://localhost:8080/api/v1/orders/${orderId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1184,7 +1184,7 @@ export const dbService = {
   getCommissionConfigs: async () => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${import.meta.env.VITE_API_IP || '192.168.100.151'}:8080/api/v1/commission-configs/admin/all`, {
+      const res = await fetch(`http://localhost:8080/api/v1/commission-configs/admin/all`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -1224,10 +1224,10 @@ export const dbService = {
   getPromotions: async (scope?: 'PLATFORM' | 'SHOP', shopId?: number) => {
     try {
       const url = scope === 'PLATFORM'
-        ? 'http://192.168.100.151:8080/api/v1/promotions/platform'
+        ? 'http://localhost:8080/api/v1/promotions/platform'
         : shopId
-        ? `http://192.168.100.151:8080/api/v1/promotions/shop/${shopId}`
-        : 'http://192.168.100.151:8080/api/v1/promotions/admin';
+        ? `http://localhost:8080/api/v1/promotions/shop/${shopId}`
+        : 'http://localhost:8080/api/v1/promotions/admin';
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -1265,7 +1265,7 @@ export const dbService = {
 
   approvePromotion: async (id: number, approved: boolean, reason?: string) => {
     try {
-      await fetch(`http://192.168.100.151:8080/api/v1/promotions/admin/${id}/approve?approved=${approved}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`, {
+      await fetch(`http://localhost:8080/api/v1/promotions/admin/${id}/approve?approved=${approved}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ approved, rejectionReason: reason })
@@ -1296,7 +1296,7 @@ export const dbService = {
 
   togglePromotion: async (id: number, isActive: boolean) => {
     try {
-      await fetch(`http://192.168.100.151:8080/api/v1/promotions/${id}/toggle?isActive=${isActive}`, {
+      await fetch(`http://localhost:8080/api/v1/promotions/${id}/toggle?isActive=${isActive}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive })
@@ -1339,7 +1339,7 @@ export const dbService = {
     try {
       if (promo.id && typeof promo.id === 'number' && promo.id < 1000000000) {
         // Update existing promotion on backend
-        const res = await fetch(`http://192.168.100.151:8080/api/v1/promotions/${promo.id}`, {
+        const res = await fetch(`http://localhost:8080/api/v1/promotions/${promo.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1357,7 +1357,7 @@ export const dbService = {
         });
         if (res.ok) savedBackendPromo = await res.json();
       } else if (promo.scope === 'PLATFORM') {
-        const res = await fetch('http://192.168.100.151:8080/api/v1/promotions/admin', {
+        const res = await fetch('http://localhost:8080/api/v1/promotions/admin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1376,7 +1376,7 @@ export const dbService = {
         if (res.ok) savedBackendPromo = await res.json();
       } else {
         const targetShopId = promo.shop_id || 1;
-        const res = await fetch(`http://192.168.100.151:8080/api/v1/promotions/shop/${targetShopId}`, {
+        const res = await fetch(`http://localhost:8080/api/v1/promotions/shop/${targetShopId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1457,7 +1457,7 @@ export const dbService = {
     message: string;
   }> => {
     try {
-      const res = await fetch('http://192.168.100.151:8082/promotions/validate', {
+      const res = await fetch('http://localhost:8082/promotions/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1540,7 +1540,7 @@ export const dbService = {
   getPromotionRedemptions: async (promotionId?: number): Promise<PromotionRedemption[]> => {
     try {
       if (promotionId) {
-        const res = await fetch(`http://192.168.100.151:8082/promotions/${promotionId}/redemptions`);
+        const res = await fetch(`http://localhost:8082/promotions/${promotionId}/redemptions`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -1582,7 +1582,7 @@ export const dbService = {
   // REVIEWS (M-SHOP-05)
   getReviews: async (shopId?: number): Promise<Review[]> => {
     try {
-      const res = await fetch(`http://192.168.100.151:8083/reviews/shop/${shopId || 1}`);
+      const res = await fetch(`http://localhost:8083/reviews/shop/${shopId || 1}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -1615,7 +1615,7 @@ export const dbService = {
 
   replyReview: async (reviewId: number, shopReply: string) => {
     try {
-      await fetch(`http://192.168.100.151:8083/reviews/${reviewId}/reply`, {
+      await fetch(`http://localhost:8083/reviews/${reviewId}/reply`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shopReply })
@@ -1639,7 +1639,7 @@ export const dbService = {
         maxSelect: optionData.max_select,
         sortOrder: optionData.sort_order
       };
-      const res = await fetch(`http://192.168.100.151:8080/api/v1/core/items/category/${categoryId}/bulk-options`, {
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/category/${categoryId}/bulk-options`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1660,7 +1660,7 @@ export const dbService = {
         maxSelect: newOptionData.max_select,
         sortOrder: newOptionData.sort_order
       };
-      const res = await fetch(`http://192.168.100.151:8080/api/v1/core/items/category/${categoryId}/bulk-options`, {
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/category/${categoryId}/bulk-options`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1676,7 +1676,7 @@ export const dbService = {
   },
   deleteBulkCategoryOption: async (categoryId: number, groupName: string, optionName: string) => {
     try {
-      const res = await fetch(`http://192.168.100.151:8080/api/v1/core/items/category/${categoryId}/bulk-options?groupName=${encodeURIComponent(groupName)}&optionName=${encodeURIComponent(optionName)}`, {
+      const res = await fetch(`http://localhost:8080/api/v1/core/items/category/${categoryId}/bulk-options?groupName=${encodeURIComponent(groupName)}&optionName=${encodeURIComponent(optionName)}`, {
         method: 'DELETE'
       });
       return res.ok;
@@ -1689,7 +1689,7 @@ export const dbService = {
   getShopRemittances: async (shopId: number) => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${import.meta.env.VITE_API_IP || '192.168.100.151'}:8083/remittances/shop/${shopId}`, {
+      const res = await fetch(`http://localhost:8083/remittances/shop/${shopId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1707,7 +1707,7 @@ export const dbService = {
   getShopWallet: async (userId: number) => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${import.meta.env.VITE_API_IP || '192.168.100.151'}:8085/wallets/user/${userId}`, {
+      const res = await fetch(`http://localhost:8085/wallets/user/${userId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
