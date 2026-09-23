@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthGuard';
-import { dbService } from '@/api/client';
+import { dbService, API_HOST } from '@/api/client';
 import { fetchProvinces, fetchDistricts, fetchWards } from '@/api/location';
 import {
   Store,
@@ -125,7 +125,7 @@ export function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:8080/api/v1/auth/login', {
+      const response = await fetch(`http://${API_HOST}:8080/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: phoneOrEmail.trim().toLowerCase(), password }),
@@ -262,6 +262,39 @@ export function LoginPage() {
     setLoading(true);
     setError('');
     setPortalView(targetPortal);
+
+    if (targetPortal === 'admin') {
+      try {
+        const response = await fetch(`http://${API_HOST}:8080/api/v1/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: '0901234567', password: '123456' }),
+        });
+        const result = await response.json();
+        if (response.ok && result.data?.accessToken) {
+          localStorage.setItem('hyperlocal_access_token', result.data.accessToken);
+          const u = result.data.user;
+          const loggedInUser: any = {
+            id: u.id,
+            phone: u.phone,
+            email: u.email,
+            full_name: u.fullName || 'Nguyễn Quản Trị',
+            role: u.role || 'ADMIN',
+            status: u.status || 'ACTIVE',
+            area_id: u.areaId || 1,
+            is_area_verified: true,
+            created_at: u.createdAt || new Date().toISOString()
+          };
+          login(loggedInUser);
+          navigate('/admin/reports');
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('Backend login in quick-login failed, falling back:', err);
+      }
+    }
+
     const users = await dbService.getUsers();
     const found = users.find((u) => u.id === userId);
     if (found) {
