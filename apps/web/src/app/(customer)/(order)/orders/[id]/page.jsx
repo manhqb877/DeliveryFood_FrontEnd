@@ -11,7 +11,7 @@ const ShipperTrackingMap = dynamic(
   { ssr: false, loading: () => <div className="w-full h-64 bg-slate-100 animate-pulse rounded-xl" /> }
 );
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.151:8080/api/v1';
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
 export default function OrderDetailsPage() {
   const params = useParams();
