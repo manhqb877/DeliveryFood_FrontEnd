@@ -136,6 +136,15 @@ function mapBackendShopToProfile(data: any): ShopProfile {
   };
 }
 
+function removeVietnameseTones(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+}
+
 function mapBackendUserToUser(data: any): User {
   return {
     id: data.id,
@@ -153,26 +162,48 @@ function mapBackendUserToUser(data: any): User {
 
 export const dbService = {
   // USERS
-  getUsers: async (): Promise<User[]> => {
+  getUsers: async (params?: { keyword?: string; role?: string; status?: string }): Promise<User[]> => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/admin/users`, {
+      const queryParams = new URLSearchParams();
+      if (params?.keyword) queryParams.append('keyword', params.keyword);
+      if (params?.role && params.role !== 'ALL') queryParams.append('role', params.role);
+      if (params?.status && params.status !== 'ALL') queryParams.append('status', params.status);
+
+      const qs = queryParams.toString() ? `?${queryParams.toString()}` : '';
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/admin/users${qs}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const json = await res.json();
         const rawList = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
-        if (rawList.length > 0) {
-          const mapped = rawList.map(mapBackendUserToUser);
+        const mapped = rawList.map(mapBackendUserToUser);
+        if (!params || (!params.keyword && (!params.role || params.role === 'ALL') && (!params.status || params.status === 'ALL'))) {
           setStored(STORAGE_KEYS.USERS, mapped);
-          return mapped;
         }
+        return mapped;
       }
     } catch (e) {
       console.error('getUsers error:', e);
     }
     // Giống các phần khác, fallback về stored/mock users khi chưa đăng nhập Admin hoặc Backend chưa có data
-    return getStored<User[]>(STORAGE_KEYS.USERS, initialUsers);
+    let list = getStored<User[]>(STORAGE_KEYS.USERS, initialUsers);
+    if (params?.keyword) {
+      const kwTrimmed = params.keyword.trim();
+      const kwNorm = removeVietnameseTones(kwTrimmed);
+      list = list.filter(u => {
+        const phone = u.phone || '';
+        const nameNorm = removeVietnameseTones(u.full_name || '');
+        return phone.includes(kwTrimmed) || nameNorm.includes(kwNorm);
+      });
+    }
+    if (params?.role && params.role !== 'ALL') {
+      list = list.filter(u => u.role === params.role);
+    }
+    if (params?.status && params.status !== 'ALL') {
+      list = list.filter(u => u.status === params.status);
+    }
+    return list;
   },
   updateUserStatus: async (userId: number, status: User['status']) => {
     try {
@@ -209,6 +240,103 @@ export const dbService = {
       console.error(e);
       return false;
     }
+  },
+  getUserDetail: async (userId: number): Promise<any> => {
+    try {
+      const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/admin/users/${userId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.data;
+      }
+    } catch (e) {
+      console.warn('Backend getUserDetail unreachable, using local fallback', e);
+    }
+    const users = getStored<User[]>(STORAGE_KEYS.USERS, initialUsers);
+    const user = users.find(u => u.id === userId);
+    if (!user) return null;
+    const areas = getStored<Area[]>(STORAGE_KEYS.AREAS, initialAreas);
+    const area = areas.find(a => a.id === user.area_id);
+    const shippers = getStored<ShipperProfile[]>(STORAGE_KEYS.SHIPPERS, initialShippers);
+    const shipper = shippers.find(s => s.user_id === user.id);
+    const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
+    const shop = shops.find(s => s.owner_id === user.id);
+
+    return {
+      ...user,
+      fullName: user.full_name,
+      avatarUrl: user.avatar_url,
+      areaId: user.area_id,
+      isAreaVerified: user.is_area_verified,
+      createdAt: user.created_at,
+      areaInfo: area ? {
+        id: area.id,
+        areaCode: area.area_code,
+        areaName: area.area_name,
+        areaType: area.area_type,
+        city: area.city,
+        district: area.district,
+        address: area.address
+      } : null,
+      shipperProfile: shipper || null,
+      shopProfile: shop || null,
+      orderStats: {
+        totalOrders: 0,
+        totalSpent: 0,
+        completedOrders: 0,
+        cancelledOrders: 0,
+        recentOrders: []
+      }
+    };
+  },
+  updateUserDetails: async (userId: number, payload: any): Promise<any> => {
+    try {
+      const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const updatedDetail = json.data;
+        // Update local cache
+        const users = getStored<User[]>(STORAGE_KEYS.USERS, initialUsers);
+        const updatedUsers = users.map(u => u.id === userId ? {
+          ...u,
+          phone: updatedDetail.phone || u.phone,
+          email: updatedDetail.email || u.email,
+          full_name: updatedDetail.fullName || u.full_name,
+          role: updatedDetail.role || u.role,
+          status: updatedDetail.status || u.status,
+          area_id: updatedDetail.areaId || u.area_id,
+          is_area_verified: updatedDetail.isAreaVerified ?? u.is_area_verified
+        } : u);
+        setStored(STORAGE_KEYS.USERS, updatedUsers);
+        return updatedDetail;
+      }
+    } catch (e) {
+      console.warn('Backend updateUserDetails unreachable, using local fallback', e);
+    }
+    // Local fallback
+    const users = getStored<User[]>(STORAGE_KEYS.USERS, initialUsers);
+    const updatedUsers = users.map(u => u.id === userId ? {
+      ...u,
+      phone: payload.phone || u.phone,
+      email: payload.email || u.email,
+      full_name: payload.fullName || u.full_name,
+      role: payload.role || u.role,
+      status: payload.status || u.status,
+      area_id: payload.areaId || u.area_id,
+      is_area_verified: payload.isAreaVerified ?? u.is_area_verified
+    } : u);
+    setStored(STORAGE_KEYS.USERS, updatedUsers);
+    return dbService.getUserDetail(userId);
   },
 
   // SHOPS
