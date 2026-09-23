@@ -11,7 +11,7 @@ const ShipperTrackingMap = dynamic(
   { ssr: false, loading: () => <div className="w-full h-64 bg-slate-100 animate-pulse rounded-xl" /> }
 );
 
-const API_GATEWAY = 'http://192.168.100.151:8080/api/v1';
+const API_GATEWAY = 'http://localhost:8080/api/v1';
 
 export default function TrackingPage() {
   const [orderCode, setOrderCode] = useState('');
