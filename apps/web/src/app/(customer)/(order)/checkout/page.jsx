@@ -109,7 +109,7 @@ export default function CheckoutPage() {
   const [promoMessage, setPromoMessage] = useState(null); // { type: 'success' | 'error', text: '' }
 
   const cartToOrder = carts.find(c => c.items?.length > 0) || { items: [] };
-  const subtotal = cartToOrder.items?.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0) || 0;
+  const subtotal = cartToOrder.items?.reduce((sum, item) => sum + Number(item.totalPrice || (item.unitPrice * item.quantity) || 0), 0) || 0;
   const deliveryFee = subtotal > 0 ? 15000 : 0;
 
   // Setup user profile data
