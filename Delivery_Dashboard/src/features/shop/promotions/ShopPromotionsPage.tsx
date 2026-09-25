@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '@/api/client';
-import { Promotion, PromotionRedemption, ShopProfile } from '@/api/mockData';
+import { Promotion, PromotionRedemption, ShopProfile, Order } from '@/api/mockData';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
@@ -21,12 +21,15 @@ import {
   Search,
   Check,
   X,
-  Edit3
+  Edit3,
+  Bell
 } from 'lucide-react';
 
 export function ShopPromotionsPage() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [currentShop, setCurrentShop] = useState<ShopProfile | null>(null);
+  const [shopOrders, setShopOrders] = useState<Order[]>([]);
+  const [recentVoucherUsages, setRecentVoucherUsages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
@@ -73,13 +76,45 @@ export function ShopPromotionsPage() {
     const myShop = await dbService.getMyShop();
     setCurrentShop(myShop);
     const currentShopId = myShop?.id;
+    let list: Promotion[] = [];
     if (currentShopId) {
-      const list = await dbService.getPromotions('SHOP', currentShopId);
-      setPromotions(list.filter((p) => p.shop_id === currentShopId));
+      const fetched = await dbService.getPromotions('SHOP', currentShopId);
+      list = fetched.filter((p) => !p.shop_id || Number(p.shop_id) === Number(currentShopId));
     } else {
-      const list = await dbService.getPromotions('SHOP');
-      setPromotions(list);
+      list = await dbService.getPromotions('SHOP');
     }
+
+    // Fetch actual shop orders to synchronize customer voucher redemptions
+    const orders = await dbService.getOrders(currentShopId ? { shop_id: currentShopId } : undefined);
+    setShopOrders(orders);
+
+    // Synchronize used_count from actual orders
+    const updatedList = list.map((p) => {
+      const matchingOrders = orders.filter((o) => o.promotion_code === p.code && o.order_status !== 'CANCELLED');
+      const count = Math.max(p.used_count || 0, matchingOrders.length);
+      return {
+        ...p,
+        used_count: count,
+      };
+    });
+    setPromotions(updatedList);
+
+    // List recent voucher usages for notification
+    const voucherOrders = orders
+      .filter((o) => !!o.promotion_code && o.order_status !== 'CANCELLED')
+      .map((o) => ({
+        id: o.id,
+        order_code: o.order_code,
+        customer_name: o.customer_name || 'Khách hàng',
+        customer_phone: o.customer_phone || '—',
+        promotion_code: o.promotion_code,
+        discount_amount: o.discount_amount || 0,
+        total_amount: o.total_amount || 0,
+        placed_at: o.placed_at,
+      }))
+      .sort((a, b) => new Date(b.placed_at).getTime() - new Date(a.placed_at).getTime());
+    setRecentVoucherUsages(voucherOrders);
+
     setLoading(false);
   };
 
@@ -168,34 +203,38 @@ export function ShopPromotionsPage() {
       return;
     }
 
-    const targetShopId = currentShop?.id || 1;
+    const targetShopId = currentShop?.id ? Number(currentShop.id) : 1;
     const targetShopName = currentShop?.shop_name || 'Gian hàng của tôi';
 
-    if (editingPromo) {
-      await dbService.savePromotion({
-        ...newPromo,
-        id: editingPromo.id,
-        shop_id: targetShopId,
-        shop_name: targetShopName,
-      });
-      toast.success(
-        `Đã cập nhật thành công các thông số mã khuyến mãi "${newPromo.code}"!`,
-        'Cập Nhật Thành Công'
-      );
-    } else {
-      await dbService.savePromotion({
-        ...newPromo,
-        scope: 'SHOP',
-        shop_id: targetShopId,
-        shop_name: targetShopName,
-        approval_status: 'PENDING',
-        is_active: true,
-        used_count: 0,
-      });
-      toast.success(
-        `Đã gửi mã khuyến mãi "${newPromo.code}" lên Quản trị viên (Admin) phê duyệt theo quy định sàn!`,
-        'Gửi Duyệt Thành Công'
-      );
+    try {
+      if (editingPromo) {
+        await dbService.savePromotion({
+          ...newPromo,
+          id: editingPromo.id,
+          shop_id: targetShopId,
+          shop_name: targetShopName,
+        });
+        toast.success(
+          `Đã cập nhật thành công các thông số mã khuyến mãi "${newPromo.code}"!`,
+          'Cập Nhật Thành Công'
+        );
+      } else {
+        await dbService.savePromotion({
+          ...newPromo,
+          scope: 'SHOP',
+          shop_id: targetShopId,
+          shop_name: targetShopName,
+          approval_status: 'PENDING',
+          is_active: true,
+          used_count: 0,
+        });
+        toast.success(
+          `Đã gửi mã khuyến mãi "${newPromo.code}" lên Quản trị viên (Admin) phê duyệt theo quy định sàn!`,
+          'Gửi Duyệt Thành Công'
+        );
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Có lỗi khi lưu khuyến mãi!', 'Lỗi');
     }
 
     setIsModalOpen(false);
@@ -215,7 +254,33 @@ export function ShopPromotionsPage() {
   const handleOpenHistory = async (promo: Promotion) => {
     setSelectedPromoForHistory(promo);
     setLoadingRedemptions(true);
-    const list = await dbService.getPromotionRedemptions(promo.id);
+    let list = await dbService.getPromotionRedemptions(promo.id);
+    
+    // Also include orders that used this promotion code
+    const matchingOrders = shopOrders.filter(
+      (o) => o.promotion_code === promo.code && o.order_status !== 'CANCELLED'
+    );
+    matchingOrders.forEach((o) => {
+      if (!list.some((r) => r.order_code === o.order_code)) {
+        list.push({
+          id: o.id,
+          promotion_id: promo.id,
+          promotion_code: promo.code,
+          order_id: o.id,
+          order_code: o.order_code,
+          user_id: o.user_id || 1,
+          user_name: o.customer_name || 'Khách hàng',
+          user_phone: o.customer_phone || '—',
+          order_value: o.total_amount || 0,
+          discount_amount:
+            o.discount_amount ||
+            (promo.promo_type === 'PERCENT'
+              ? Math.round((o.total_amount || 0) * (promo.discount_value / 100))
+              : promo.discount_value),
+          used_at: o.placed_at || new Date().toISOString(),
+        });
+      }
+    });
     setRedemptions(list);
     setLoadingRedemptions(false);
   };
@@ -292,6 +357,40 @@ export function ShopPromotionsPage() {
           </div>
         </div>
       </div>
+
+      {/* Live Voucher Usage Notification Banner */}
+      {recentVoucherUsages.length > 0 && (
+        <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-3 w-3 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <div className="text-xs">
+              <span className="font-bold text-emerald-900 mr-1.5 flex-inline items-center gap-1">
+                <Bell className="w-3.5 h-3.5 inline text-emerald-600 mr-0.5" />
+                Thông báo:
+              </span>
+              <span className="font-bold text-slate-800">
+                {recentVoucherUsages[0].customer_name}
+              </span>
+              <span className="text-slate-500"> ({recentVoucherUsages[0].customer_phone}) vừa áp dụng voucher </span>
+              <span className="font-mono font-bold bg-white text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-300 shadow-2xs">
+                {recentVoucherUsages[0].promotion_code}
+              </span>
+              <span className="text-emerald-700 font-bold ml-1">
+                (giảm -{(recentVoucherUsages[0].discount_amount || 0).toLocaleString()} ₫)
+              </span>
+              <span className="text-slate-400 text-[11px] ml-2">
+                cho đơn #{recentVoucherUsages[0].order_code} • {new Date(recentVoucherUsages[0].placed_at).toLocaleTimeString('vi-VN')}
+              </span>
+            </div>
+          </div>
+          <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-200">
+            Tổng {recentVoucherUsages.length} lượt khách đã dùng
+          </span>
+        </div>
+      )}
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

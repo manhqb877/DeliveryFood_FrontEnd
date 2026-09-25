@@ -31,6 +31,7 @@ import { ShopOrdersPage } from '@/features/shop/orders/ShopOrdersPage';
 import { ShopShippersPage } from '@/features/shop/shippers/ShopShippersPage';
 import { ShopPromotionsPage } from '@/features/shop/promotions/ShopPromotionsPage';
 import { ShopReviewsPage } from '@/features/shop/reviews/ShopReviewsPage';
+import { ShopMessagesPage } from '@/features/shop/messages/ShopMessagesPage';
 
 function RootLayout() {
   return (
@@ -100,6 +101,7 @@ export const router = createBrowserRouter([
           { path: 'shippers', element: <ShopShippersPage /> },
           { path: 'promotions', element: <ShopPromotionsPage /> },
           { path: 'reviews', element: <ShopReviewsPage /> },
+          { path: 'messages', element: <ShopMessagesPage /> },
         ],
       },
       {

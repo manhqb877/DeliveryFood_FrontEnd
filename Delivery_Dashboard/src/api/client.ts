@@ -100,6 +100,37 @@ export function generateIdempotencyKey(): string {
   return 'idempotency-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now();
 }
 
+// Helper to get access token and automatically discard if expired or invalid
+export function getValidToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
+  if (!token || token === 'undefined' || token === 'null') {
+    localStorage.removeItem('hyperlocal_access_token');
+    localStorage.removeItem('auth_token');
+    return null;
+  }
+  try {
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      const base64Url = parts[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(decodeURIComponent(escape(atob(base64))));
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        console.warn('JWT token has expired, clearing from localStorage to prevent 401 Unauthorized');
+        localStorage.removeItem('hyperlocal_access_token');
+        localStorage.removeItem('auth_token');
+        return null;
+      }
+    }
+  } catch (e) {
+    console.warn('Invalid token format, clearing from localStorage:', e);
+    localStorage.removeItem('hyperlocal_access_token');
+    localStorage.removeItem('auth_token');
+    return null;
+  }
+  return token;
+}
+
 function mapBackendShopToProfile(data: any): ShopProfile {
   return {
     id: data.id,
@@ -341,17 +372,20 @@ export const dbService = {
 
   // SHOPS
   getMyShop: async (): Promise<ShopProfile | null> => {
-    const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
+    const token = getValidToken();
     const currentUserRaw = localStorage.getItem('hyperlocal_current_user');
     const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
 
-    // 1. Try /api/v1/auth/shops/me if token exists
+    // 1. Try /api/v1/auth/shops/me if valid token exists
     if (token) {
       try {
         const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem('hyperlocal_access_token');
+          localStorage.removeItem('auth_token');
+        } else if (res.ok) {
           const json = await res.json();
           if (json.data) {
             return mapBackendShopToProfile(json.data);
@@ -363,7 +397,10 @@ export const dbService = {
           const directRes = await fetch(`http://${API_HOST}:8081/api/v1/auth/shops/me`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
-          if (directRes.ok) {
+          if (directRes.status === 401) {
+            localStorage.removeItem('hyperlocal_access_token');
+            localStorage.removeItem('auth_token');
+          } else if (directRes.ok) {
             const directJson = await directRes.json();
             if (directJson.data) {
               return mapBackendShopToProfile(directJson.data);
@@ -572,7 +609,7 @@ export const dbService = {
   },
   updateShopProfile: async (shopId: number, data: Partial<ShopProfile>) => {
     // Try calling backend API if auth token exists
-    const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
+    const token = getValidToken();
     if (token) {
       try {
         const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
@@ -593,7 +630,10 @@ export const dbService = {
             isAcceptingOrders: data.is_accepting_orders
           })
         });
-        if (res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem('hyperlocal_access_token');
+          localStorage.removeItem('auth_token');
+        } else if (res.ok) {
           const apiRes = await res.json();
           console.log('Backend profile updated:', apiRes);
           if (apiRes.data) {
@@ -611,13 +651,17 @@ export const dbService = {
     return updated.find(s => s.id === shopId);
   },
   toggleShopOpenStatus: async (shopId: number, isOpen: boolean) => {
-    const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
+    const token = getValidToken();
     if (token) {
       try {
-        await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me/open?isOpen=${isOpen}`, {
+        const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me/open?isOpen=${isOpen}`, {
           method: 'PATCH',
           headers: { 'Authorization': `Bearer ${token}` }
         });
+        if (res.status === 401) {
+          localStorage.removeItem('hyperlocal_access_token');
+          localStorage.removeItem('auth_token');
+        }
       } catch (err) {
         console.warn('Backend server unreachable, updating local storage', err);
       }
@@ -628,13 +672,17 @@ export const dbService = {
     return updated.find(s => s.id === shopId);
   },
   toggleShopAcceptingOrders: async (shopId: number, isAcceptingOrders: boolean) => {
-    const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
+    const token = getValidToken();
     if (token) {
       try {
-        await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me/accepting?isAcceptingOrders=${isAcceptingOrders}`, {
+        const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me/accepting?isAcceptingOrders=${isAcceptingOrders}`, {
           method: 'PATCH',
           headers: { 'Authorization': `Bearer ${token}` }
         });
+        if (res.status === 401) {
+          localStorage.removeItem('hyperlocal_access_token');
+          localStorage.removeItem('auth_token');
+        }
       } catch (err) {
         console.warn('Backend server unreachable, updating local storage', err);
       }
@@ -745,18 +793,23 @@ export const dbService = {
   getCategories: async (shopId: number) => {
     try {
       let targetShopId = shopId;
-      const token = localStorage.getItem('hyperlocal_access_token');
-      if (token) {
-        const meRes = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          if (meData?.data?.id) {
-            targetShopId = meData.data.id;
+      if (!targetShopId) {
+        const token = getValidToken();
+        if (token) {
+          const meRes = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (meRes.status === 401) {
+            localStorage.removeItem('hyperlocal_access_token');
+          } else if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData?.data?.id) {
+              targetShopId = meData.data.id;
+            }
           }
         }
       }
+      targetShopId = targetShopId || 1;
       
       const res = await fetch(`http://${API_HOST}:8080/api/v1/core/categories/shop/${targetShopId}`);
       if (res.ok) {
@@ -811,18 +864,23 @@ export const dbService = {
   getItems: async (shopId: number) => {
     try {
       let targetShopId = shopId;
-      const token = localStorage.getItem('hyperlocal_access_token');
-      if (token) {
-        const meRes = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          if (meData?.data?.id) {
-            targetShopId = meData.data.id;
+      if (!targetShopId) {
+        const token = getValidToken();
+        if (token) {
+          const meRes = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (meRes.status === 401) {
+            localStorage.removeItem('hyperlocal_access_token');
+          } else if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData?.data?.id) {
+              targetShopId = meData.data.id;
+            }
           }
         }
       }
+      targetShopId = targetShopId || 1;
 
       const res = await fetch(`http://${API_HOST}:8080/api/v1/core/shops/${targetShopId}/details`);
       if (res.ok) {
@@ -1096,19 +1154,24 @@ export const dbService = {
   getOrders: async (filters?: { shop_id?: number; area_id?: number; status?: string }) => {
     try {
       let targetShopId = filters?.shop_id;
-      const token = localStorage.getItem('hyperlocal_access_token');
-      if (!targetShopId && token) {
-        try {
-          const meRes = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (meRes.ok) {
-            const meData = await meRes.json();
-            if (meData?.data?.id) {
-              targetShopId = meData.data.id;
+      if (!targetShopId) {
+        const token = getValidToken();
+        if (token) {
+          try {
+            const meRes = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (meRes.status === 401) {
+              localStorage.removeItem('hyperlocal_access_token');
+              localStorage.removeItem('auth_token');
+            } else if (meRes.ok) {
+              const meData = await meRes.json();
+              if (meData?.data?.id) {
+                targetShopId = meData.data.id;
+              }
             }
-          }
-        } catch (e) {}
+          } catch (e) {}
+        }
       }
 
       if (targetShopId) {
@@ -1463,6 +1526,7 @@ export const dbService = {
 
   // PROMOTIONS (M-SHOP-05 & M-ADM-05 Anti-Abuse)
   getPromotions: async (scope?: 'PLATFORM' | 'SHOP', shopId?: number) => {
+    let backendPromos: Promotion[] = [];
     try {
       const url = scope === 'PLATFORM'
         ? `http://${API_HOST}:8080/api/v1/promotions/platform`
@@ -1473,7 +1537,7 @@ export const dbService = {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
-          const mapped: Promotion[] = data.map((d: any) => ({
+          backendPromos = data.map((d: any) => ({
             id: d.id,
             code: d.code,
             promo_type: d.promoType || 'FIXED_AMOUNT',
@@ -1495,13 +1559,29 @@ export const dbService = {
             is_active: d.isActive !== false,
             created_at: d.createdAt || new Date().toISOString()
           }));
-          return mapped;
         }
       }
     } catch (e) {
       console.warn('Backend core-service unreachable for promotions, using local storage fallback', e);
     }
-    return [];
+
+    // Always merge with local storage so promotions created locally/pending approval are never lost
+    const localPromos = getStored<Promotion[]>(STORAGE_KEYS.PROMOTIONS, initialPromotions);
+    const combined: Promotion[] = [...backendPromos];
+
+    for (const lp of localPromos) {
+      const exists = combined.some(
+        p => p.id === lp.id || (p.code && lp.code && p.code.toUpperCase() === lp.code.toUpperCase())
+      );
+      if (!exists) {
+        if (scope === 'PLATFORM' && lp.scope !== 'PLATFORM') continue;
+        if (scope === 'SHOP' && lp.scope !== 'SHOP') continue;
+        if (shopId && lp.shop_id && Number(lp.shop_id) !== Number(shopId)) continue;
+        combined.push(lp);
+      }
+    }
+
+    return combined;
   },
 
   approvePromotion: async (id: number, approved: boolean, reason?: string) => {
@@ -1616,7 +1696,7 @@ export const dbService = {
         });
         if (res.ok) savedBackendPromo = await res.json();
       } else {
-        const targetShopId = promo.shop_id || 1;
+        const targetShopId = promo.shop_id ? Number(promo.shop_id) : 1;
         const res = await fetch(`http://${API_HOST}:8080/api/v1/promotions/shop/${targetShopId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1633,7 +1713,12 @@ export const dbService = {
             validUntil: formatValidDate(promo.valid_until, true)
           })
         });
-        if (res.ok) savedBackendPromo = await res.json();
+        if (res.ok) {
+          const resJson = await res.json();
+          if (resJson && resJson.id && !resJson.error) {
+            savedBackendPromo = resJson;
+          }
+        }
       }
     } catch (e) {
       console.warn('Backend core-service savePromotion unreachable, storing locally', e);
@@ -1643,24 +1728,26 @@ export const dbService = {
     let updated: Promotion[];
     let newOrUpdatedPromo: Promotion;
 
+    const finalShopId = promo.shop_id ? Number(promo.shop_id) : (savedBackendPromo?.shopId ? Number(savedBackendPromo.shopId) : 1);
+
     if (promo.id) {
-      updated = list.map(p => p.id === promo.id ? { ...p, ...promo } as Promotion : p);
-      newOrUpdatedPromo = { ...promo } as Promotion;
+      updated = list.map(p => p.id === promo.id ? { ...p, ...promo, shop_id: finalShopId } as Promotion : p);
+      newOrUpdatedPromo = { ...promo, shop_id: finalShopId } as Promotion;
     } else {
       newOrUpdatedPromo = {
         id: savedBackendPromo?.id || Date.now(),
         code: promo.code || `KM${Date.now()}`,
         promo_type: promo.promo_type || 'FIXED_AMOUNT',
         scope: promo.scope || 'SHOP',
-        shop_id: promo.shop_id,
+        shop_id: finalShopId,
         shop_name: promo.shop_name,
         area_id: promo.area_id,
-        discount_value: promo.discount_value || 10000,
-        min_order_value: promo.min_order_value || 50000,
-        max_discount_amount: promo.max_discount_amount,
-        total_limit: promo.total_limit || 100,
+        discount_value: Number(promo.discount_value) || 10000,
+        min_order_value: Number(promo.min_order_value) || 50000,
+        max_discount_amount: promo.max_discount_amount ? Number(promo.max_discount_amount) : undefined,
+        total_limit: Number(promo.total_limit) || 100,
         used_count: 0,
-        per_user_limit: promo.per_user_limit || 1,
+        per_user_limit: Number(promo.per_user_limit) || 1,
         applicable_to: promo.applicable_to || 'ALL',
         valid_from: promo.valid_from || new Date().toISOString(),
         valid_until: promo.valid_until || new Date(Date.now() + 30 * 86400000).toISOString(),
@@ -1698,7 +1785,7 @@ export const dbService = {
     message: string;
   }> => {
     try {
-      const res = await fetch(`http://${API_HOST}:8082/promotions/validate`, {
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/promotions/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1781,7 +1868,7 @@ export const dbService = {
   getPromotionRedemptions: async (promotionId?: number): Promise<PromotionRedemption[]> => {
     try {
       if (promotionId) {
-        const res = await fetch(`http://${API_HOST}:8082/promotions/${promotionId}/redemptions`);
+        const res = await fetch(`http://${API_HOST}:8080/api/v1/promotions/${promotionId}/redemptions`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -1821,7 +1908,7 @@ export const dbService = {
   // REVIEWS (M-SHOP-05)
   getReviews: async (shopId?: number): Promise<Review[]> => {
     try {
-      const res = await fetch(`http://${API_HOST}:8083/reviews/shop/${shopId || 1}`);
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/reviews/shop/${shopId || 1}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -1852,7 +1939,7 @@ export const dbService = {
 
   replyReview: async (reviewId: number, shopReply: string) => {
     try {
-      await fetch(`http://${API_HOST}:8083/reviews/${reviewId}/reply`, {
+      await fetch(`http://${API_HOST}:8080/api/v1/reviews/${reviewId}/reply`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shopReply })
@@ -1923,7 +2010,7 @@ export const dbService = {
   getShopRemittances: async (shopId: number) => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${API_HOST}:8083/remittances/shop/${shopId}`, {
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/remittances/shop/${shopId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1941,18 +2028,224 @@ export const dbService = {
   getShopWallet: async (userId: number) => {
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
-      const res = await fetch(`http://${API_HOST}:8085/wallets/user/${userId}`, {
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/wallets/user/${userId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
       if (res.ok) {
         const json = await res.json();
-        return json.data || json;
+        const w = json.data || json;
+        if (w && typeof w.balance !== 'undefined') {
+          return {
+            balance: Number(w.balance) || 0,
+            status: w.status || 'ACTIVE'
+          };
+        }
       }
     } catch (e) {
       console.error('Lỗi khi lấy thông tin ví:', e);
     }
     return { balance: 0, status: 'INACTIVE' };
+  },
+
+  // REALTIME CHAT (SHOP & CUSTOMER)
+  getShopConversations: async (shopId: number): Promise<ChatConversation[]> => {
+    try {
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/conversations/shop/${shopId}`);
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || (Array.isArray(json) ? json : []);
+      }
+      const resDirect = await fetch(`http://${API_HOST}:8086/conversations/shop/${shopId}`);
+      if (resDirect.ok) {
+        const json = await resDirect.json();
+        return json.data || (Array.isArray(json) ? json : []);
+      }
+    } catch (e) {
+      try {
+        const resDirect = await fetch(`http://${API_HOST}:8086/conversations/shop/${shopId}`);
+        if (resDirect.ok) {
+          const json = await resDirect.json();
+          return json.data || (Array.isArray(json) ? json : []);
+        }
+      } catch (err) {}
+    }
+    return [];
+  },
+
+  getConversationMessages: async (conversationId: string): Promise<ChatMessage[]> => {
+    try {
+      let res = await fetch(`http://${API_HOST}:8080/api/v1/conversations/${conversationId}/messages`);
+      if (!res.ok) {
+        res = await fetch(`http://${API_HOST}:8086/conversations/${conversationId}/messages`);
+      }
+      if (!res.ok) {
+        res = await fetch(`http://${API_HOST}:8080/api/v1/messages/conversation/${conversationId}`);
+      }
+      if (!res.ok) {
+        res = await fetch(`http://${API_HOST}:8086/messages/conversation/${conversationId}`);
+      }
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || (Array.isArray(json) ? json : []);
+      }
+    } catch (e) {
+      try {
+        const resDirect = await fetch(`http://${API_HOST}:8086/conversations/${conversationId}/messages`);
+        if (resDirect.ok) {
+          const json = await resDirect.json();
+          return json.data || (Array.isArray(json) ? json : []);
+        }
+      } catch (err) {}
+    }
+    return [];
+  },
+
+  sendChatMessage: async (payload: {
+    conversationId: string;
+    senderType: string;
+    senderId: number;
+    content: string;
+    messageType?: string;
+    attachmentUrl?: string;
+  }): Promise<ChatMessage | null> => {
+    try {
+      let res = await fetch(`http://${API_HOST}:8080/api/v1/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        res = await fetch(`http://${API_HOST}:8086/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || json;
+      }
+    } catch (e) {
+      try {
+        const resDirect = await fetch(`http://${API_HOST}:8086/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (resDirect.ok) {
+          const json = await resDirect.json();
+          return json.data || json;
+        }
+      } catch (err) {}
+    }
+    return null;
+  },
+
+  markMessagesRead: async (conversationId: string, readerType: 'SHOP' | 'CUSTOMER'): Promise<boolean> => {
+    try {
+      let res = await fetch(`http://${API_HOST}:8080/api/v1/conversations/${conversationId}/read?readerType=${readerType}`, {
+        method: 'PATCH'
+      });
+      if (!res.ok) {
+        res = await fetch(`http://${API_HOST}:8086/conversations/${conversationId}/read?readerType=${readerType}`, {
+          method: 'PATCH'
+        });
+      }
+      return res.ok;
+    } catch (e) {
+      try {
+        const res = await fetch(`http://${API_HOST}:8086/conversations/${conversationId}/read?readerType=${readerType}`, {
+          method: 'PATCH'
+        });
+        return res.ok;
+      } catch (err) {
+        return false;
+      }
+    }
+  },
+
+  initConversation: async (payload: {
+    shopId: number;
+    customerId?: number;
+    guestSessionId?: number;
+    orderId?: number;
+    shopName?: string;
+    shopLogo?: string;
+    customerName?: string;
+    customerPhone?: string;
+    customerAvatar?: string;
+  }): Promise<ChatConversation | null> => {
+    try {
+      let res = await fetch(`http://${API_HOST}:8080/api/v1/conversations/init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        res = await fetch(`http://${API_HOST}:8086/conversations/init`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || json;
+      }
+    } catch (e) {
+      try {
+        const res = await fetch(`http://${API_HOST}:8086/conversations/init`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const json = await res.json();
+          return json.data || json;
+        }
+      } catch (err) {}
+    }
+    return null;
   }
 };
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  senderType: 'CUSTOMER' | 'GUEST' | 'SHOP' | 'SHIPPER' | 'ADMIN' | 'BOT';
+  senderId: number;
+  messageType: 'TEXT' | 'IMAGE' | 'ORDER_LINK' | 'SYSTEM';
+  content: string;
+  attachmentUrl?: string;
+  isRead: boolean;
+  readAt?: string;
+  createdAt: string;
+}
+
+export interface ChatConversation {
+  id: string;
+  orderId?: number;
+  conversationType: string;
+  participants: {
+    customerId?: number;
+    guestSessionId?: number;
+    shopId?: number;
+    shipperId?: number;
+  };
+  shopName?: string;
+  shopLogo?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerAvatar?: string;
+  lastMessageContent?: string;
+  lastSenderType?: string;
+  lastMessageAt?: string;
+  unreadShopCount: number;
+  unreadCustomerCount: number;
+  isResolved: boolean;
+  createdAt: string;
+}
+
+export const api = dbService;

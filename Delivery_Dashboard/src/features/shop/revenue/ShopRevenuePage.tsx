@@ -34,6 +34,8 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
+  Filter,
+  X,
 } from 'lucide-react';
 import {
   CommissionRecord,
@@ -45,6 +47,19 @@ import {
   HourlyOrderAnalysis,
 } from '@/api/mockData';
 import { dbService } from '@/api/client';
+
+// ============ CSV Export Helper ============
+function downloadCsv(filename: string, csvContent: string) {
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 // ============ Metric Card ============
 function MetricCard({
@@ -202,16 +217,71 @@ function CommissionTable({
   );
 }
 
-// ============ Platform Payout Schedule Table (Lịch Chi Trả Nền Tảng) ============
 function PayoutScheduleView({ schedules }: { schedules: PlatformPayoutSchedule[] }) {
   const [selectedReceipt, setSelectedReceipt] = useState<PlatformPayoutSchedule | null>(null);
+
+  const exportReceiptCsv = (sc: PlatformPayoutSchedule) => {
+    const lines = [
+      `BÁO CÁO SAO KÊ CHI TRẢ THU NHẬP GIAN HÀNG`,
+      `Kỳ đối soát,"${sc.period_name}"`,
+      `Mã kỳ,"${sc.period_code}"`,
+      `Khoảng thời gian bán hàng,"${sc.start_date} đến ${sc.end_date}"`,
+      `Ngày chi trả,"${sc.payout_date}"`,
+      `Mã tham chiếu ngân hàng,"${sc.transaction_ref || '---'}"`,
+      `Thời gian tất toán,"${sc.paid_at ? new Date(sc.paid_at).toLocaleString('vi-VN') : '---'}"`,
+      `Ngân hàng thụ hưởng,"${sc.bank_name || 'MB Bank'} (${sc.bank_account_mask || ''})"`,
+      `Trạng thái chi trả,"${sc.payout_status === 'PAID' ? 'Đã chi trả' : sc.payout_status === 'PROCESSING' ? 'Đang xử lý đối soát' : 'Dự kiến kỳ tới'}"`,
+      ``,
+      `CHỈ SỐ TÀI CHÍNH KỲ ĐỐI SOÁT`,
+      `Tổng số đơn hàng hoàn tất,${sc.total_orders}`,
+      `Doanh thu gộp (VND),${sc.order_revenue}`,
+      `Hoa hồng sàn khấu trừ 15% (VND),-${sc.commission_deducted}`,
+      `Số tiền thực nhận chuyển khoản (VND),${sc.net_payout}`,
+    ];
+    downloadCsv(`Sao_ke_${sc.period_code}_${sc.transaction_ref || 'payout'}.csv`, lines.join('\n'));
+  };
+
+  const exportAllSchedulesCsv = () => {
+    const headers = [
+      'Mã kỳ',
+      'Tên kỳ đối soát',
+      'Từ ngày',
+      'Đến ngày',
+      'Ngày chi trả',
+      'Tổng số đơn',
+      'Doanh thu gộp (VND)',
+      'Hoa hồng sàn 15% (VND)',
+      'Thực nhận (VND)',
+      'Trạng thái',
+      'Mã GD ngân hàng',
+      'Ngân hàng thụ hưởng',
+      'Thời gian tất toán'
+    ];
+    const rows = schedules.map((sc) => [
+      `"${sc.period_code}"`,
+      `"${sc.period_name}"`,
+      `"${sc.start_date}"`,
+      `"${sc.end_date}"`,
+      `"${sc.payout_date}"`,
+      sc.total_orders,
+      sc.order_revenue,
+      sc.commission_deducted,
+      sc.net_payout,
+      `"${sc.payout_status === 'PAID' ? 'Đã chi trả' : sc.payout_status === 'PROCESSING' ? 'Đang xử lý' : 'Dự kiến'}"`,
+      `"${sc.transaction_ref || ''}"`,
+      `"${sc.bank_name || ''} ${sc.bank_account_mask || ''}"`,
+      `"${sc.paid_at ? new Date(sc.paid_at).toLocaleString('vi-VN') : ''}"`
+    ]);
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    downloadCsv(`Lich_chi_tra_nen_tang_${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  };
 
   const statusBadge = (s: PlatformPayoutSchedule['payout_status']) => {
     if (s === 'PAID')
       return (
         <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold flex items-center gap-1 w-fit mx-auto">
           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-          Đã chuyển khoản
+          Đã chi trả
         </span>
       );
     if (s === 'PROCESSING')
@@ -249,6 +319,22 @@ function PayoutScheduleView({ schedules }: { schedules: PlatformPayoutSchedule[]
 
       {/* Payout Schedule Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="p-3.5 border-b border-slate-200 bg-slate-50/70 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+              Danh Sách Kỳ Chi Trả & Đối Soát
+            </h3>
+            <p className="text-[11px] text-slate-500">Xem chi tiết hoặc xuất sao kê chứng từ tất toán</p>
+          </div>
+          <button
+            onClick={exportAllSchedulesCsv}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Xuất file CSV Toàn bộ lịch
+          </button>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -285,17 +371,26 @@ function PayoutScheduleView({ schedules }: { schedules: PlatformPayoutSchedule[]
                   </td>
                   <td className="p-3 text-center">{statusBadge(sc.payout_status)}</td>
                   <td className="p-3 text-center">
-                    {sc.payout_status === 'PAID' ? (
+                    <div className="flex items-center justify-center gap-1">
+                      {sc.payout_status === 'PAID' && (
+                        <button
+                          onClick={() => setSelectedReceipt(sc)}
+                          className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded font-semibold hover:bg-blue-100 cursor-pointer text-[10px] flex items-center gap-1"
+                          title="Xem chi tiết sao kê"
+                        >
+                          <FileSpreadsheet className="w-3 h-3" />
+                          Sao kê
+                        </button>
+                      )}
                       <button
-                        onClick={() => setSelectedReceipt(sc)}
-                        className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded font-semibold hover:bg-blue-100 cursor-pointer text-[10px] flex items-center gap-1 mx-auto"
+                        onClick={() => exportReceiptCsv(sc)}
+                        className="px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded font-semibold hover:bg-emerald-100 cursor-pointer text-[10px] flex items-center gap-1"
+                        title={sc.payout_status === 'PAID' ? 'Xuất sao kê đã chi trả (CSV)' : 'Xuất bảng đối soát tạm tính (CSV)'}
                       >
-                        <FileSpreadsheet className="w-3 h-3" />
-                        Sao kê
+                        <Download className="w-3 h-3 text-emerald-600" />
+                        Xuất CSV
                       </button>
-                    ) : (
-                      <span className="text-slate-300 text-[11px]">—</span>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -363,7 +458,14 @@ function PayoutScheduleView({ schedules }: { schedules: PlatformPayoutSchedule[]
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-1">
+              <div className="flex justify-between items-center gap-2 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => exportReceiptCsv(selectedReceipt)}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Xuất file Sao kê (CSV)
+                </button>
                 <button
                   onClick={() => setSelectedReceipt(null)}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium cursor-pointer"
@@ -381,6 +483,8 @@ function PayoutScheduleView({ schedules }: { schedules: PlatformPayoutSchedule[]
 
 // ============ Customer Table ============
 function CustomerTable({ customers }: { customers: CustomerPurchaseRecord[] }) {
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerPurchaseRecord | null>(null);
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
       <div className="overflow-x-auto">
@@ -418,18 +522,29 @@ function CustomerTable({ customers }: { customers: CustomerPurchaseRecord[] }) {
                 <td className="p-3 text-right text-slate-600">{c.avg_order_value.toLocaleString()} ₫</td>
                 <td className="p-3 text-slate-700">{c.favorite_item || '—'}</td>
                 <td className="p-3">
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {c.used_vouchers.length > 0 ? (
                       c.used_vouchers.map((v) => (
-                        <span
+                        <button
                           key={v}
-                          className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] font-bold"
+                          type="button"
+                          onClick={() => setSelectedCustomer(c)}
+                          className="px-2 py-0.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                          title="Bấm để xem chi tiết voucher khách đã dùng"
                         >
-                          {v}
-                        </span>
+                          <Ticket className="w-3 h-3 text-purple-600" />
+                          <span>{v}</span>
+                        </button>
                       ))
                     ) : (
-                      <span className="text-slate-300">—</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCustomer(c)}
+                        className="text-slate-400 hover:text-slate-600 text-[11px] cursor-pointer hover:underline"
+                        title="Xem lịch sử voucher của khách"
+                      >
+                        Chưa dùng
+                      </button>
                     )}
                   </div>
                 </td>
@@ -458,6 +573,110 @@ function CustomerTable({ customers }: { customers: CustomerPurchaseRecord[] }) {
           </tbody>
         </table>
       </div>
+
+      {/* Modal: Chi Tiết Voucher Khách Hàng Đã Sử Dụng */}
+      {selectedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden text-xs">
+            <div className="p-4 bg-linear-to-r from-purple-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-purple-500/20 rounded-xl">
+                  <Ticket className="w-5 h-5 text-purple-300" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Chi Tiết Voucher Khách Đã Dùng</h3>
+                  <p className="text-[11px] text-purple-200 mt-0.5">
+                    {selectedCustomer.user_name} • SĐT: {selectedCustomer.user_phone}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedCustomer(null)}
+                className="text-slate-300 hover:text-white cursor-pointer text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                <div>
+                  <p className="text-[11px] text-slate-500">Tổng số đơn</p>
+                  <p className="text-base font-bold text-slate-800">{selectedCustomer.total_orders} đơn</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500">Tổng chi tiêu</p>
+                  <p className="text-base font-bold text-emerald-700">{selectedCustomer.total_spent.toLocaleString()} ₫</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500">Mã đã áp dụng</p>
+                  <p className="text-base font-bold text-purple-700">{selectedCustomer.used_vouchers.length} mã</p>
+                </div>
+              </div>
+
+              {selectedCustomer.used_vouchers.length > 0 ? (
+                <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                  <p className="font-bold text-slate-700 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Lịch sử voucher đã áp dụng vào đơn hàng:
+                  </p>
+                  {(selectedCustomer.voucher_details && selectedCustomer.voucher_details.length > 0
+                    ? selectedCustomer.voucher_details
+                    : selectedCustomer.used_vouchers.map((v) => ({
+                        code: v,
+                        order_code: selectedCustomer.last_order_code || 'ORD-RECENT',
+                        discount_amount: 30000,
+                        order_total: selectedCustomer.avg_order_value || 112500,
+                        used_at: selectedCustomer.last_order_at || new Date().toISOString(),
+                      }))
+                  ).map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs bg-white text-purple-800 px-2 py-0.5 rounded border border-purple-300 shadow-2xs">
+                            {item.code}
+                          </span>
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                            Đã áp dụng thành công
+                          </span>
+                        </div>
+                        <span className="font-bold text-emerald-700 text-sm">
+                          -{item.discount_amount ? Number(item.discount_amount).toLocaleString() : '30.000'} ₫
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-600 flex justify-between pt-1 border-t border-purple-100">
+                        <span>Đơn hàng: <b className="font-mono text-blue-600">#{item.order_code}</b></span>
+                        <span>Tổng thanh toán: <b>{item.order_total ? Number(item.order_total).toLocaleString() : '—'} ₫</b></span>
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        Thời gian sử dụng: {item.used_at ? new Date(item.used_at).toLocaleString('vi-VN') : '—'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center space-y-1 text-slate-500">
+                  <p className="text-2xl">🎟</p>
+                  <p className="font-bold text-slate-700">Khách hàng chưa áp dụng mã voucher nào</p>
+                  <p className="text-[11px]">Khách hàng thanh toán đơn hàng nguyên giá chưa sử dụng phiếu giảm giá.</p>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => setSelectedCustomer(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -610,9 +829,13 @@ export function ShopRevenuePage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [periodFilter, setPeriodFilter] = useState<string>('ALL');
+
+  // Date Filter States (Từ ngày — Đến ngày)
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   const loadRevenueData = async () => {
     setLoading(true);
@@ -641,15 +864,33 @@ export function ShopRevenuePage() {
     loadRevenueData();
   }, []);
 
+  // Filter orders according to custom range (Từ ngày — Đến ngày)
+  const filteredOrders = orders.filter((o) => {
+    const dateStr = o.placed_at || (o as any).created_at;
+    if (!dateStr) return true;
+    const orderDate = new Date(dateStr);
+    if (isNaN(orderDate.getTime())) return true;
+
+    if (startDate) {
+      const s = new Date(`${startDate}T00:00:00`);
+      if (orderDate < s) return false;
+    }
+    if (endDate) {
+      const e = new Date(`${endDate}T23:59:59`);
+      if (orderDate > e) return false;
+    }
+    return true;
+  });
+
   // Compute metrics from REAL database orders
-  const validOrders = orders.filter((o) => o.order_status !== 'CANCELLED');
+  const validOrders = filteredOrders.filter((o) => o.order_status !== 'CANCELLED');
   const totalRevenue = validOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
   const totalOrders = validOrders.length;
   const totalCommission = Math.round(totalRevenue * 0.15);
   const netRevenue = totalRevenue - totalCommission;
   const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
-  const cancelledOrders = orders.filter((o) => o.order_status === 'CANCELLED').length;
-  const completionRate = orders.length > 0 ? ((validOrders.length / orders.length) * 100).toFixed(1) : '100';
+  const cancelledOrders = filteredOrders.filter((o) => o.order_status === 'CANCELLED').length;
+  const completionRate = filteredOrders.length > 0 ? ((validOrders.length / filteredOrders.length) * 100).toFixed(1) : '100';
 
   // Dynamic datasets computed from real orders
   const dynamicTimeframeDatasets = {
@@ -667,7 +908,7 @@ export function ShopRevenuePage() {
         { label: '20h', hour: 20 },
       ].map((slot) => {
         const slotOrders = validOrders.filter((o) => {
-          const ordDate = new Date(o.placed_at);
+          const ordDate = new Date(o.placed_at || (o as any).created_at);
           const h = ordDate.getHours();
           return h >= slot.hour - 1 && h <= slot.hour + 1;
         });
@@ -694,7 +935,7 @@ export function ShopRevenuePage() {
         { label: 'T7', day: 6 },
         { label: 'CN', day: 0 },
       ].map((d) => {
-        const dayOrders = validOrders.filter((o) => new Date(o.placed_at).getDay() === d.day);
+        const dayOrders = validOrders.filter((o) => new Date(o.placed_at || (o as any).created_at).getDay() === d.day);
         const rev = dayOrders.reduce((s, o) => s + (o.total_amount || 0), 0);
         return {
           label: d.label,
@@ -716,7 +957,7 @@ export function ShopRevenuePage() {
         { label: 'Tuần 4 (22-31)', start: 22, end: 31 },
       ].map((w) => {
         const weekOrders = validOrders.filter((o) => {
-          const dt = new Date(o.placed_at).getDate();
+          const dt = new Date(o.placed_at || (o as any).created_at).getDate();
           return dt >= w.start && dt <= w.end;
         });
         const rev = weekOrders.reduce((s, o) => s + (o.total_amount || 0), 0);
@@ -729,6 +970,26 @@ export function ShopRevenuePage() {
       }),
       trend: `${validOrders.length} đơn hoàn thành`,
       trendUp: true,
+    },
+    yearly: {
+      title: `Doanh Thu Năm Nay (${new Date().getFullYear()})`,
+      sub: 'Doanh thu phân bổ theo 12 tháng trong năm',
+      data: Array.from({ length: 12 }, (_, i) => {
+        const m = i + 1;
+        const monthOrders = validOrders.filter((o) => {
+          const dt = new Date(o.placed_at || (o as any).created_at);
+          return dt.getMonth() === i;
+        });
+        const rev = monthOrders.reduce((s, o) => s + (o.total_amount || 0), 0);
+        return {
+          label: `T${m}`,
+          revenue: rev,
+          orders: monthOrders.length,
+          commission: Math.round(rev * 0.15),
+        };
+      }),
+      trend: `${validOrders.length} đơn hoàn thành trong năm`,
+      trendUp: totalRevenue > 0,
     },
   };
 
@@ -782,15 +1043,31 @@ export function ShopRevenuePage() {
 
   // Customer records aggregated from orders
   const customerMap = new Map<string, CustomerPurchaseRecord>();
-  orders.forEach((o) => {
+  filteredOrders.forEach((o) => {
     const phone = o.customer_phone || o.customer_name || `Khách #${o.id}`;
     const existing = customerMap.get(phone);
+    const voucherInfo = o.promotion_code
+      ? {
+          code: o.promotion_code,
+          order_code: o.order_code,
+          discount_amount: o.discount_amount || 0,
+          order_total: o.total_amount || 0,
+          used_at: o.placed_at || (o as any).created_at,
+        }
+      : null;
+
     if (existing) {
       existing.total_orders += 1;
       existing.total_spent += o.total_amount || 0;
       existing.avg_order_value = Math.round(existing.total_spent / existing.total_orders);
-      if (o.promotion_code && !existing.used_vouchers.includes(o.promotion_code)) {
-        existing.used_vouchers.push(o.promotion_code);
+      if (o.promotion_code) {
+        if (!existing.used_vouchers.includes(o.promotion_code)) {
+          existing.used_vouchers.push(o.promotion_code);
+        }
+        if (voucherInfo) {
+          existing.voucher_details = existing.voucher_details || [];
+          existing.voucher_details.push(voucherInfo);
+        }
       }
       existing.is_repeat_customer = existing.total_orders >= 2;
     } else {
@@ -803,6 +1080,7 @@ export function ShopRevenuePage() {
         avg_order_value: o.total_amount || 0,
         favorite_item: o.items?.[0]?.item_name || 'Món ngon quán',
         used_vouchers: o.promotion_code ? [o.promotion_code] : [],
+        voucher_details: voucherInfo ? [voucherInfo] : [],
         is_repeat_customer: false,
         review_count: 1,
         last_order_at: o.placed_at,
@@ -885,7 +1163,7 @@ export function ShopRevenuePage() {
             Làm mới
           </button>
           <div className="flex bg-white border border-slate-200 p-0.5 rounded-lg text-xs shadow-xs">
-            {(['daily', 'weekly', 'monthly'] as const).map((tf) => (
+            {(['daily', 'weekly', 'monthly', 'yearly'] as const).map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
@@ -893,7 +1171,7 @@ export function ShopRevenuePage() {
                   timeframe === tf ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {tf === 'daily' ? 'Hôm nay' : tf === 'weekly' ? 'Tuần này' : 'Tháng này'}
+                {tf === 'daily' ? 'Hôm nay' : tf === 'weekly' ? 'Tuần này' : tf === 'monthly' ? 'Tháng này' : 'Năm nay'}
               </button>
             ))}
           </div>
@@ -905,9 +1183,9 @@ export function ShopRevenuePage() {
         <MetricCard
           label="Doanh thu thuần (Shop nhận về)"
           value={
-            netRevenue >= 10000000
-              ? `${(netRevenue / 1000000).toFixed(2)}M ₫`
-              : `${netRevenue.toLocaleString()} ₫`
+            (netRevenue || 0) >= 10000000
+              ? `${((netRevenue || 0) / 1000000).toFixed(2)}M ₫`
+              : `${(netRevenue || 0).toLocaleString()} ₫`
           }
           icon={DollarSign}
           iconBg="bg-emerald-50 text-emerald-600"
@@ -916,7 +1194,7 @@ export function ShopRevenuePage() {
         />
         <MetricCard
           label="Tổng đơn hàng thành công"
-          value={`${totalOrders.toLocaleString()} đơn`}
+          value={`${(totalOrders || 0).toLocaleString()} đơn`}
           icon={ShoppingBag}
           iconBg="bg-blue-50 text-blue-600"
           trend={`Tỷ lệ hoàn tất ${completionRate}%`}
@@ -924,7 +1202,7 @@ export function ShopRevenuePage() {
         />
         <MetricCard
           label="Giá trị trung bình / đơn"
-          value={`${avgOrderValue.toLocaleString()} ₫`}
+          value={`${(avgOrderValue || 0).toLocaleString()} ₫`}
           icon={Award}
           iconBg="bg-purple-50 text-purple-600"
           sub={itemSalesData[0]?.name ? `Món nổi bật: ${itemSalesData[0].name}` : 'Chưa có món nổi bật'}
@@ -932,9 +1210,9 @@ export function ShopRevenuePage() {
         <MetricCard
           label="Hoa hồng nền tảng (15%)"
           value={
-            totalCommission >= 10000000
-              ? `${(totalCommission / 1000000).toFixed(2)}M ₫`
-              : `${totalCommission.toLocaleString()} ₫`
+            (totalCommission || 0) >= 10000000
+              ? `${((totalCommission || 0) / 1000000).toFixed(2)}M ₫`
+              : `${(totalCommission || 0).toLocaleString()} ₫`
           }
           icon={Percent}
           iconBg="bg-amber-50 text-amber-600"
@@ -950,7 +1228,7 @@ export function ShopRevenuePage() {
             Số Dư Ví Cửa Hàng
           </h3>
           <p className="text-4xl font-black text-indigo-900 mt-1 tracking-tight">
-            {wallet ? `${wallet.balance.toLocaleString()} ₫` : '0 ₫'}
+            {(wallet?.balance != null ? Number(wallet.balance) : 0).toLocaleString()} ₫
           </p>
           <p className="text-xs text-indigo-600 mt-2 font-medium flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3" />
@@ -976,6 +1254,67 @@ export function ShopRevenuePage() {
             {TAB_LABELS[tab]}
           </button>
         ))}
+      </div>
+
+      {/* Date Filter Bar: Từ ngày — Đến ngày */}
+      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+            <Calendar className="w-4 h-4 text-emerald-600" />
+            <span>Lọc theo ngày:</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
+              <span className="text-slate-500 font-medium">Từ ngày:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs text-slate-700 font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+              />
+            </div>
+
+            <span className="text-slate-400 font-bold">—</span>
+
+            <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
+              <span className="text-slate-500 font-medium">Đến ngày:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-white border border-slate-300 rounded px-2.5 py-1 text-xs text-slate-700 font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+              />
+            </div>
+
+            {(startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-medium cursor-pointer transition-colors"
+                title="Xóa khoảng ngày"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Xóa lọc</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="text-xs text-slate-500 flex items-center gap-2 ml-auto">
+          <span>Khớp:</span>
+          <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full text-xs">
+            {filteredOrders.length} đơn hàng
+          </span>
+          {(startDate || endDate) && (
+            <span className="text-[11px] text-slate-400 italic">
+              ({startDate ? `Từ ${startDate}` : ''} {endDate ? `Đến ${endDate}` : ''})
+            </span>
+          )}
+        </div>
       </div>
 
       {/* TAB 1: OVERVIEW */}

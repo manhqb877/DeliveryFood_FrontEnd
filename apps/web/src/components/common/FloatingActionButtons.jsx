@@ -5,6 +5,17 @@ import { ChevronUpIcon, PhoneIcon, ChatBubbleLeftEllipsisIcon } from '@heroicons
 
 export default function FloatingActionButtons() {
   const [isVisible, setIsVisible] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const handleUnreadUpdate = (e) => {
+      if (typeof e.detail === 'number') {
+        setUnreadCount(e.detail);
+      }
+    };
+    window.addEventListener('chat-unread-count-updated', handleUnreadUpdate);
+    return () => window.removeEventListener('chat-unread-count-updated', handleUnreadUpdate);
+  }, []);
 
   useEffect(() => {
     const toggleVisibility = () => {
@@ -41,13 +52,19 @@ export default function FloatingActionButtons() {
       </button>
 
       {/* Message Button */}
-      <a
-        href="#"
-        className="w-12 h-12 rounded-full bg-[var(--color-primary)] text-black flex items-center justify-center shadow-lg hover:bg-[var(--color-primary-dark)] hover:scale-110 transition-all duration-300"
-        title="Nhắn tin"
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent('toggle-chat'))}
+        className="relative w-12 h-12 rounded-full bg-[var(--color-primary)] text-black flex items-center justify-center shadow-lg hover:bg-[var(--color-primary-dark)] hover:scale-110 transition-all duration-300 cursor-pointer"
+        title="Nhắn tin với quán"
       >
         <ChatBubbleLeftEllipsisIcon className="w-6 h-6" />
-      </a>
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow-md">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
 
       {/* Phone Button */}
       <a

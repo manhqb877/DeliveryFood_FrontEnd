@@ -397,6 +397,13 @@ export interface CustomerPurchaseRecord {
   last_order_at: string;
   last_order_code: string;
   used_vouchers: string[];        // Mã voucher đã dùng tại shop
+  voucher_details?: Array<{
+    code: string;
+    order_code: string;
+    discount_amount: number;
+    order_total: number;
+    used_at: string;
+  }>;
   avg_order_value: number;
   favorite_item?: string;         // Món hay gọi nhất
   is_repeat_customer: boolean;

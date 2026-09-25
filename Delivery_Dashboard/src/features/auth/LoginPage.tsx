@@ -178,10 +178,14 @@ export function LoginPage() {
         }
       } else {
         // Bắt lỗi từ Backend
+        localStorage.removeItem('hyperlocal_access_token');
+        localStorage.removeItem('auth_token');
         setError(result.message || 'Số điện thoại/Email hoặc mật khẩu không chính xác!');
       }
     } catch (err) {
       console.error(err);
+      localStorage.removeItem('hyperlocal_access_token');
+      localStorage.removeItem('auth_token');
       setError('Có lỗi xảy ra khi kết nối máy chủ!');
     } finally {
       setLoading(false);
@@ -289,9 +293,33 @@ export function LoginPage() {
           navigate('/admin/reports');
           setLoading(false);
           return;
+        } else {
+          localStorage.removeItem('hyperlocal_access_token');
+          localStorage.removeItem('auth_token');
         }
       } catch (err) {
         console.warn('Backend login in quick-login failed, falling back:', err);
+        localStorage.removeItem('hyperlocal_access_token');
+        localStorage.removeItem('auth_token');
+      }
+    } else if (targetPortal === 'shop') {
+      try {
+        const response = await fetch(`http://${API_HOST}:8080/api/v1/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: '0902345678', password: '123456' }),
+        });
+        const result = await response.json();
+        if (response.ok && result.data?.accessToken) {
+          localStorage.setItem('hyperlocal_access_token', result.data.accessToken);
+        } else {
+          localStorage.removeItem('hyperlocal_access_token');
+          localStorage.removeItem('auth_token');
+        }
+      } catch (err) {
+        console.warn('Backend login for shop in quick-login failed, falling back:', err);
+        localStorage.removeItem('hyperlocal_access_token');
+        localStorage.removeItem('auth_token');
       }
     }
 
