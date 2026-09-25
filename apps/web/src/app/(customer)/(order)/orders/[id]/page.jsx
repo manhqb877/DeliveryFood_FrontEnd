@@ -176,23 +176,104 @@ export default function OrderDetailsPage() {
           </p>
         </div>
 
-        {/* Status Tracker */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Truck className="w-5 h-5 text-red-600" />
-            Trạng thái giao hàng
-          </h3>
-          <div className="flex items-center text-sm font-semibold text-gray-700">
-            {order.orderStatus === 'PLACED' && "Đang chờ nhà hàng xác nhận..."}
-            {order.orderStatus === 'CONFIRMED' && "Nhà hàng đã xác nhận, đang chuẩn bị..."}
-            {order.orderStatus === 'PREPARING' && "Nhà hàng đang chuẩn bị món..."}
-            {order.orderStatus === 'READY_FOR_PICKUP' && "Món đã sẵn sàng, chờ Shipper lấy..."}
-            {order.orderStatus === 'ASSIGNED' && "Đã tìm thấy Shipper!"}
-            {order.orderStatus === 'PICKED_UP' && "Shipper đã lấy hàng!"}
-            {order.orderStatus === 'DELIVERING' && "Shipper đang giao hàng đến bạn!"}
-            {order.orderStatus === 'DELIVERED' && "Giao hàng thành công!"}
-            {order.orderStatus === 'COMPLETED' && "Đơn hàng đã hoàn tất!"}
-            {order.orderStatus === 'CANCELLED' && "Đơn hàng đã bị hủy!"}
+        {/* Status Tracker with Kanban Animation */}
+        <div className="bg-gradient-to-br from-white via-amber-50/20 to-white rounded-2xl p-5 shadow-sm border border-amber-200/70">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-amber-100">
+            <h3 className="font-bold text-gray-900 flex items-center gap-2 text-sm md:text-base">
+              <Truck className="w-5 h-5 text-amber-600" />
+              Lộ trình xử lý đơn hàng (Kanban)
+            </h3>
+            {['PLACED', 'CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'DELIVERING'].includes(order.orderStatus) && (
+              <span className="px-2.5 py-0.5 bg-amber-500 text-white rounded-full text-xs font-bold animate-pulse flex items-center gap-1 shadow-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                Đang xử lý trực tiếp
+              </span>
+            )}
+          </div>
+
+          {/* 4 Stages */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              {
+                step: 1,
+                name: '1. Tiếp nhận',
+                sub: 'Đã nhận đơn',
+                desc: 'Hệ thống đã nhận và chuyển đơn sang quán.',
+                icon: Clock,
+              },
+              {
+                step: 2,
+                name: '2. Nấu món',
+                sub: 'Bếp chuẩn bị',
+                desc: 'Nhà hàng đang nấu và đóng gói món cẩn thận.',
+                icon: Package,
+              },
+              {
+                step: 3,
+                name: '3. Đang giao',
+                sub: 'Shipper di chuyển',
+                desc: 'Tài xế đã nhận món và đang giao đến bạn.',
+                icon: Truck,
+              },
+              {
+                step: 4,
+                name: '4. Thành công',
+                sub: 'Giao tận tay',
+                desc: 'Giao hàng thành công. Chúc bạn ngon miệng!',
+                icon: CheckCircle2,
+              },
+            ].map((st) => {
+              const getStage = (status) => {
+                if (status === 'PLACED') return 1;
+                if (['CONFIRMED', 'PREPARING', 'COOKING'].includes(status)) return 2;
+                if (['READY_FOR_PICKUP', 'ASSIGNED', 'PICKED_UP', 'DELIVERING', 'ON_THE_WAY'].includes(status)) return 3;
+                if (['DELIVERED', 'COMPLETED'].includes(status)) return 4;
+                return 1;
+              };
+              const currentStep = getStage(order.orderStatus);
+              const isCompleted = currentStep > st.step;
+              const isCurrent = currentStep === st.step && order.orderStatus !== 'CANCELLED';
+              const Icon = st.icon;
+
+              return (
+                <div
+                  key={st.step}
+                  className={`p-3.5 rounded-xl border text-xs transition-all relative flex flex-col justify-between ${
+                    isCurrent
+                      ? 'bg-white border-2 border-amber-400 ring-2 ring-amber-400/20 shadow-md scale-[1.01]'
+                      : isCompleted
+                      ? 'bg-white border-emerald-300 shadow-2xs'
+                      : 'bg-slate-50 border-slate-200 opacity-60'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-2">
+                      <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                        <Icon className={`w-4 h-4 ${isCurrent ? 'text-amber-600' : isCompleted ? 'text-emerald-600' : 'text-slate-400'}`} />
+                        {st.name}
+                      </span>
+                      {isCompleted ? (
+                        <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px]">
+                          ✓ Xong
+                        </span>
+                      ) : isCurrent ? (
+                        <span className="px-1.5 py-0.5 bg-amber-500 text-white rounded font-bold text-[10px] animate-pulse">
+                          Đang xử lý
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[10px]">Chờ</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug">{st.desc}</p>
+                  </div>
+                  {isCurrent && (
+                    <div className="mt-2.5 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full animate-pulse w-full"></div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

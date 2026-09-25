@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/app/AuthGuard';
-import { dbService } from '@/api/client';
+import { dbService, api, API_HOST } from '@/api/client';
 import { ShopProfile } from '@/api/mockData';
+import { Client } from '@stomp/stompjs';
+// @ts-ignore
+import SockJS from 'sockjs-client/dist/sockjs';
 import {
   TrendingUp,
   Store,
@@ -14,8 +17,30 @@ import {
   LogOut,
   ArrowRightLeft,
   Power,
-  BellOff
+  BellOff,
+  MessageSquare
 } from 'lucide-react';
+
+function playShopNotificationChime() {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.45);
+  } catch (e) {}
+}
 
 interface MenuSubItem {
   path: string;
@@ -30,14 +55,64 @@ interface MenuGroup {
 
 export function ShopLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser, setRole, logout } = useAuth();
   const [shop, setShop] = useState<ShopProfile | null>(null);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+
+  const fetchUnread = async (shopId: number) => {
+    try {
+      const convs = await api.getShopConversations(shopId);
+      const total = convs.reduce((acc, c) => acc + (c.unreadShopCount || 0), 0);
+      setUnreadMessagesCount(total);
+    } catch (e) {}
+  };
 
   useEffect(() => {
     dbService.getMyShop().then((myShop) => {
-      if (myShop) setShop(myShop);
+      if (myShop) {
+        setShop(myShop);
+        fetchUnread(myShop.id);
+      }
     });
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (shop?.id && location.pathname === '/shop/messages') {
+      fetchUnread(shop.id);
+    }
+  }, [location.pathname, shop?.id]);
+
+  // Global STOMP listener for new incoming customer messages
+  useEffect(() => {
+    if (!shop?.id) return;
+
+    const client = new Client({
+      webSocketFactory: () => new SockJS(`http://${API_HOST}:8086/ws-chat`),
+      reconnectDelay: 4000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
+      debug: () => {},
+    });
+
+    client.onConnect = () => {
+      client.subscribe(`/topic/shop.${shop.id}`, (payload) => {
+        try {
+          const newMsg = JSON.parse(payload.body);
+          if (newMsg.senderType !== 'SHOP') {
+            playShopNotificationChime();
+            setUnreadMessagesCount((prev) => prev + 1);
+          }
+        } catch (e) {}
+      });
+    };
+
+    client.activate();
+
+    return () => {
+      if (client.active) client.deactivate();
+    };
+  }, [shop?.id]);
 
   const toggleIsOpen = async () => {
     if (!shop) return;
@@ -79,10 +154,16 @@ export function ShopLayout() {
       ],
     },
     {
+      groupLabel: 'CHĂM SÓC KHÁCH HÀNG',
+      items: [
+        { path: '/shop/messages', label: 'Tin nhắn khách hàng', icon: <MessageSquare className="w-4 h-4" /> },
+        { path: '/shop/reviews', label: 'Đánh giá từ khách', icon: <Star className="w-4 h-4" /> },
+      ],
+    },
+    {
       groupLabel: 'KINH DOANH',
       items: [
         { path: '/shop/promotions', label: 'Khuyến mãi gian hàng', icon: <Tag className="w-4 h-4" /> },
-        { path: '/shop/reviews', label: 'Đánh giá từ khách', icon: <Star className="w-4 h-4" /> },
       ],
     },
   ];
@@ -115,15 +196,22 @@ export function ShopLayout() {
                     key={item.path}
                     to={item.path}
                     className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                      `flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                         isActive
                           ? 'bg-blue-600 text-white font-semibold shadow-xs'
                           : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
                       }`
                     }
                   >
-                    {item.icon}
-                    <span>{item.label}</span>
+                    <div className="flex items-center gap-3">
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </div>
+                    {item.path === '/shop/messages' && unreadMessagesCount > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold shadow-xs">
+                        {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
+                      </span>
+                    )}
                   </NavLink>
                 ))}
               </div>
@@ -219,6 +307,22 @@ export function ShopLayout() {
                     shop?.is_accepting_orders ? 'translate-x-4' : 'translate-x-0'
                   }`}
                 />
+              </button>
+            </div>
+
+            {/* Message Notification Button */}
+            <div className="pl-6 border-l border-slate-200 flex items-center">
+              <button
+                onClick={() => navigate('/shop/messages')}
+                className="relative p-2 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Tin nhắn khách hàng"
+              >
+                <MessageSquare className="w-5 h-5" />
+                {unreadMessagesCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-4.5 min-w-4.5 px-1 items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold shadow-md animate-pulse">
+                    {unreadMessagesCount > 9 ? '9+' : unreadMessagesCount}
+                  </span>
+                )}
               </button>
             </div>
           </div>

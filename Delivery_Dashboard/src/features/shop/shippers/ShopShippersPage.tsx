@@ -298,7 +298,7 @@ function ShipperRemittancesList({ shopId, shipperId }: { shopId: number, shipper
                 <button 
                   onClick={async () => {
                     if(confirm('Xác nhận Shipper đã nộp tiền COD cho đơn này?')) {
-                      await fetch(`http://localhost:8083/remittances/${r.id}/complete`, { method: 'POST' });
+                      await fetch(`http://localhost:8080/api/v1/remittances/${r.id}/complete`, { method: 'POST' });
                       // Reload
                       window.location.reload();
                     }
