@@ -20,6 +20,7 @@ import {
   BellOff,
   MessageSquare
 } from 'lucide-react';
+import { NotificationBell } from '@/components/ui/NotificationBell';
 
 function playShopNotificationChime() {
   try {
@@ -173,14 +174,23 @@ export function ShopLayout() {
       {/* Sidebar - Dark Navy (#0F2540) */}
       <aside className="w-64 bg-[#0F2540] text-slate-300 flex flex-col shrink-0 border-r border-slate-800">
         {/* Header / Logo */}
-        <div className="p-5 border-b border-slate-800/80 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
-            <Store className="w-5 h-5" />
+        <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-bold text-lg shadow-md shrink-0">
+              <Store className="w-5 h-5" />
+            </div>
+            <div className="truncate">
+              <h1 className="font-bold text-sm text-white truncate">{shop?.shop_name || 'SHOP MANAGER'}</h1>
+              <p className="text-[11px] text-slate-400 font-medium truncate">{shop?.location_detail || shop?.area_name || 'Đang cập nhật địa chỉ...'}</p>
+            </div>
           </div>
-          <div className="truncate">
-            <h1 className="font-bold text-sm text-white truncate">{shop?.shop_name || 'SHOP MANAGER'}</h1>
-            <p className="text-[11px] text-slate-400 font-medium truncate">{shop?.location_detail || shop?.area_name || 'Đang cập nhật địa chỉ...'}</p>
-          </div>
+          {shop?.id && (
+            <NotificationBell
+              recipientId={shop.id}
+              role="SHOP"
+              onNavigateToOrder={() => navigate('/shop/orders')}
+            />
+          )}
         </div>
 
         {/* Navigation items */}

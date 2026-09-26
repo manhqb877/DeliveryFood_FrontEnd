@@ -15,6 +15,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
+import NotificationBell from '@/components/common/NotificationBell';
 
 export default function OrderHeader() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -292,6 +293,11 @@ export default function OrderHeader() {
               <span className="text-[14px] font-black text-gray-800 leading-tight">1900 1755</span>
             </div>
           </div>
+
+          {/* Notification Bell */}
+          {isMounted && isAuthenticated && user && (
+            <NotificationBell />
+          )}
 
           {/* User Account — đã đăng nhập hoặc chưa */}
           {isMounted && isAuthenticated && user ? (

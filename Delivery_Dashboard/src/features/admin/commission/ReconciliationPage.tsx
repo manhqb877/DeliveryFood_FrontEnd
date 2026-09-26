@@ -179,7 +179,8 @@ export function ReconciliationPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(r => {
+              {filtered.map((item: any) => {
+                const r = item;
                 const isConfirmed = r.status === 'CONFIRMED' || r.status === 'COMPLETED' || r.reconcile_status === 'CONFIRMED';
                 return (
                   <tr key={r.id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${isConfirmed ? 'opacity-60' : ''}`}>

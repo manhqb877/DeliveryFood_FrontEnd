@@ -21,6 +21,8 @@ import {
   ArrowRightLeft
 } from 'lucide-react';
 
+import { NotificationBell } from '@/components/ui/NotificationBell';
+
 interface MenuSubItem {
   path: string;
   label: string;
@@ -152,14 +154,21 @@ export function AdminLayout() {
       {/* Sidebar - Dark Navy (#0F2540) */}
       <aside className="w-64 bg-[#0F2540] text-slate-300 flex flex-col shrink-0 border-r border-slate-800">
         {/* Header / Logo */}
-        <div className="p-5 border-b border-slate-800/80 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
-            <Shield className="w-5 h-5" />
+        <div className="p-5 border-b border-slate-800/80 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
+              <Shield className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="font-bold text-sm text-white tracking-wide">HYPERLOCAL</h1>
+              <p className="text-[11px] text-slate-400 font-medium">Admin Portal System</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-bold text-sm text-white tracking-wide">HYPERLOCAL</h1>
-            <p className="text-[11px] text-slate-400 font-medium">Admin Portal System</p>
-          </div>
+          <NotificationBell
+            recipientId={currentUser?.id || 1}
+            role="ADMIN"
+            onNavigateToOrder={() => navigate('/admin/orders')}
+          />
         </div>
 
         {/* Navigation items */}
