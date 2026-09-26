@@ -19,6 +19,7 @@ import {
   TruckIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '@/context/AuthContext';
+import NotificationBell from '@/components/common/NotificationBell';
 
 export default function Header() {
   const pathname = usePathname();
@@ -147,12 +148,14 @@ export default function Header() {
             {!mounted ? (
               <div className="w-[100px] h-8 bg-gray-100 animate-pulse rounded-full" />
             ) : isAuthenticated && user ? (
-              <div className="relative mx-1" ref={userMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowUserMenu((v) => !v)}
-                  className="flex items-center gap-2 py-1.5 px-2.5 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
-                >
+              <div className="flex items-center gap-1">
+                <NotificationBell />
+                <div className="relative mx-1" ref={userMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowUserMenu((v) => !v)}
+                    className="flex items-center gap-2 py-1.5 px-2.5 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                  >
                   <div className="w-8 h-8 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-black font-black text-[13px] uppercase shadow-sm">
                     {(user.fullName || user.phone || '?')[0].toUpperCase()}
                   </div>
@@ -208,15 +211,16 @@ export default function Header() {
                   </div>
                 )}
               </div>
-            ) : (
-              <Link
-                href="/login"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-bold text-gray-700 hover:text-black rounded-full hover:bg-gray-100 transition-all cursor-pointer"
-              >
-                <UserCircleIcon className="w-5 h-5 text-gray-500" />
-                <span>Đăng nhập</span>
-              </Link>
-            )}
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-bold text-gray-700 hover:text-black rounded-full hover:bg-gray-100 transition-all cursor-pointer"
+            >
+              <UserCircleIcon className="w-5 h-5 text-gray-500" />
+              <span>Đăng nhập</span>
+            </Link>
+          )}
 
             {/* ORDER CTA */}
             <Link

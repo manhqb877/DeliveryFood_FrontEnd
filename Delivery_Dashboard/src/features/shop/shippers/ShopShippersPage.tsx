@@ -323,7 +323,7 @@ function ShipperDeliveredOrdersList({ shopId, shipperId }: { shopId: number, shi
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      dbService.getOrders(shopId),
+      dbService.getOrders({ shop_id: shopId }),
       fetch(`http://localhost:8080/api/v1/tracking/shippers/${shipperId}/history`).then(res => res.json())
     ]).then(([shopOrders, shipperHistory]) => {
       if (!Array.isArray(shipperHistory)) shipperHistory = [];
