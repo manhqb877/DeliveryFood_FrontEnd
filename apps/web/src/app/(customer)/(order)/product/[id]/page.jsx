@@ -240,7 +240,7 @@ export default function ProductDetailPage() {
           <div className="w-full md:w-1/2 flex flex-col pt-4">
             {/* Shop Info */}
             {product.shopName && (
-              <Link href={`/shop/${product.shopId || 1}`} className="inline-flex items-center gap-2 text-gray-600 hover:text-[var(--color-primary)] transition w-fit mb-3 bg-gray-50 px-3 py-1.5 rounded-full text-sm font-medium border border-gray-100">
+              <Link href={`/order?shopId=${product.shopId || 1}&shopName=${encodeURIComponent(product.shopName || '')}`} className="inline-flex items-center gap-2 text-gray-600 hover:text-[var(--color-primary)] transition w-fit mb-3 bg-gray-50 px-3 py-1.5 rounded-full text-sm font-medium border border-gray-100">
                 <BuildingStorefrontIcon className="w-4 h-4" />
                 {product.shopName}
               </Link>

@@ -546,8 +546,20 @@ export default function TrackingPage() {
                 <div className="space-y-3.5 text-xs md:text-sm">
                   <div>
                     <p className="text-gray-400 text-xs mb-0.5">Người nhận</p>
-                    <p className="font-bold text-gray-900">{order.customerName}</p>
-                    <p className="text-gray-600">{order.customerPhone}</p>
+                    <p className="font-bold text-gray-900">
+                      {order.customerName ||
+                        order.deliveryAddress?.recipientName ||
+                        order.deliveryAddress?.name ||
+                        (typeof window !== 'undefined' && JSON.parse(localStorage.getItem('fooddelivery_user') || '{}')?.fullName) ||
+                        'Khách hàng'}
+                    </p>
+                    <p className="text-gray-600">
+                      {order.customerPhone ||
+                        order.deliveryAddress?.recipientPhone ||
+                        order.deliveryAddress?.phone ||
+                        (typeof window !== 'undefined' && JSON.parse(localStorage.getItem('fooddelivery_user') || '{}')?.phone) ||
+                        ''}
+                    </p>
                   </div>
                   <div>
                     <p className="text-gray-400 text-xs mb-0.5">Địa chỉ giao hàng</p>
@@ -577,7 +589,7 @@ export default function TrackingPage() {
                     <div key={item.id} className="flex gap-3 items-center">
                       <div className="w-14 h-14 rounded-xl border border-gray-100 overflow-hidden relative shrink-0">
                         {item.itemImage ? (
-                          <Image src={item.itemImage} alt={item.itemName} fill className="object-cover" />
+                          <Image src={item.itemImage} alt={item.itemName || 'Món ăn'} fill className="object-cover" />
                         ) : (
                           <div className="w-full h-full bg-gray-50 flex items-center justify-center">
                             <Package className="w-6 h-6 text-gray-300" />
@@ -586,7 +598,7 @@ export default function TrackingPage() {
                       </div>
                       <div className="flex-1">
                         <div className="flex justify-between items-start">
-                          <p className="font-bold text-gray-900">{item.itemName}</p>
+                          <p className="font-bold text-gray-900">{item.itemName || `Món ăn #${item.itemId}`}</p>
                           <p className="font-bold text-gray-900">
                             {Number(item.totalPrice).toLocaleString('vi-VN')} ₫
                           </p>
@@ -605,17 +617,25 @@ export default function TrackingPage() {
                 <div className="mt-5 pt-3.5 border-t border-dashed border-gray-200 text-xs md:text-sm space-y-2">
                   <div className="flex justify-between items-center text-gray-500">
                     <span>Tổng tiền món</span>
-                    <span>{Number(order.totalAmount - (order.shippingFee || 0) + (order.discountAmount || 0)).toLocaleString('vi-VN')} ₫</span>
+                    <span>
+                      {Number(
+                        order.subtotal != null
+                          ? order.subtotal
+                          : order.totalAmount - (order.deliveryFee || order.shippingFee || 0) + (order.discountAmount || 0)
+                      ).toLocaleString('vi-VN')} ₫
+                    </span>
                   </div>
-                  {order.discountAmount > 0 && (
+                  {Number(order.discountAmount) > 0 && (
                     <div className="flex justify-between items-center text-emerald-600 font-semibold">
-                      <span>Voucher giảm giá ({order.promotionCode})</span>
+                      <span>Voucher giảm giá {order.promotionCode ? `(${order.promotionCode})` : ''}</span>
                       <span>-{Number(order.discountAmount).toLocaleString('vi-VN')} ₫</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center text-gray-500">
                     <span>Phí giao hàng</span>
-                    <span>{Number(order.shippingFee || 0).toLocaleString('vi-VN')} ₫</span>
+                    <span>
+                      {Number(order.deliveryFee != null ? order.deliveryFee : (order.shippingFee || 0)).toLocaleString('vi-VN')} ₫
+                    </span>
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-gray-200">
                     <span className="font-bold text-gray-900 text-base">Tổng thanh toán</span>
