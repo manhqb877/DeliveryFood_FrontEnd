@@ -12,6 +12,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 import Providers from "@/components/Providers";
+import AIAgentChatBubble from "@/components/chat/AIAgentChatBubble";
 
 export const metadata = {
   title: "DeliveryFood",
@@ -25,8 +26,13 @@ export default function RootLayout({ children }) {
       className={`${quicksand.variable} ${plusJakartaSans.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans bg-gray-50" suppressHydrationWarning>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          {/* AI Ordering Agent Chatbot — hiển thị trên mọi trang */}
+          <AIAgentChatBubble />
+        </Providers>
       </body>
     </html>
   );
 }
+
