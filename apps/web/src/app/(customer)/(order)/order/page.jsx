@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { TagIcon, SparklesIcon, BuildingStorefrontIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline';
 import ProductCard from '@/components/menu/ProductCard';
 import FlashSaleSection from '@/components/menu/FlashSaleSection';
@@ -13,7 +14,11 @@ const banners = [
   "https://imgmainsite.be.com.vn/2022/07/2c763054-810x540_freeship-m%E1%BB%8Di-%C4%91%C6%A1n-h%C3%A0ng.jpg"
 ];
 
-export default function OrderPage() {
+function OrderContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlShopId = searchParams.get('shopId') || searchParams.get('shop');
+
   const [activeCategory, setActiveCategory] = useState('');
   const [shops, setShops] = useState([]);
   const [selectedShopId, setSelectedShopId] = useState(null);
@@ -39,7 +44,9 @@ export default function OrderPage() {
         
         if (data && data.length > 0) {
           setShops(data);
-          setSelectedShopId(data[0].id);
+          // Ưu tiên chọn quán từ URL shopId nếu có
+          const matched = urlShopId ? data.find(s => String(s.id) === String(urlShopId)) : null;
+          setSelectedShopId(matched ? matched.id : (urlShopId ? (Number(urlShopId) || urlShopId) : data[0].id));
         } else {
           setErrorMsg("Hệ thống chưa có quán nào.");
           setLoading(false);
@@ -51,7 +58,20 @@ export default function OrderPage() {
       }
     };
     fetchShops();
-  }, []);
+  }, [urlShopId]);
+
+  // Cập nhật selectedShopId khi URL thay đổi
+  useEffect(() => {
+    if (urlShopId) {
+      setSelectedShopId(Number(urlShopId) || urlShopId);
+    }
+  }, [urlShopId]);
+
+  const handleSelectShop = (shop) => {
+    setSelectedShopId(shop.id);
+    const slug = encodeURIComponent(shop.shopName.toLowerCase().replace(/[^a-z0-9àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ\s]/gi, '').trim().replace(/\s+/g, '-'));
+    router.push(`/order?shopId=${shop.id}&shopName=${slug}`, { scroll: false });
+  };
 
   // 2. Lấy chi tiết quán khi selectedShopId thay đổi
   useEffect(() => {
@@ -120,7 +140,7 @@ export default function OrderPage() {
                   {shops.map(shop => (
                     <button 
                       key={shop.id}
-                      onClick={() => setSelectedShopId(shop.id)}
+                      onClick={() => handleSelectShop(shop)}
                       className={`w-full text-left px-4 py-3 border-l-4 transition-all ${
                         selectedShopId === shop.id 
                           ? 'border-[var(--color-hc-red)] bg-yellow-50/50 text-[var(--color-hc-red)] font-bold' 
@@ -253,5 +273,17 @@ export default function OrderPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function OrderPage() {
+  return (
+    <Suspense fallback={
+      <div className="bg-white min-h-[500px] w-full flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <OrderContent />
+    </Suspense>
   );
 }
