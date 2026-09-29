@@ -5,6 +5,7 @@ import { Table, Column } from '@/components/ui/Table';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { History, Eye, Clock } from 'lucide-react';
 
 export function OrdersMonitorPage() {
@@ -44,6 +45,16 @@ export function OrdersMonitorPage() {
     const matchStatus = statusFilter === 'ALL' || o.order_status === statusFilter;
     return matchSearch && matchStatus;
   });
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter]);
+
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const paginatedOrders = filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const columns: Column<Order>[] = [
     {
@@ -134,10 +145,16 @@ export function OrdersMonitorPage() {
 
       <Table
         columns={columns}
-        data={filteredOrders}
+        data={paginatedOrders}
         loading={loading}
         keyExtractor={(o) => o.id}
         emptyMessage="Không tìm thấy đơn hàng nào"
+      />
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
       />
 
       {/* Audit Log Modal */}

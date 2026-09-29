@@ -18,7 +18,8 @@ import {
   ArrowRightLeft,
   Power,
   BellOff,
-  MessageSquare
+  MessageSquare,
+  Receipt
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 
@@ -151,6 +152,7 @@ export function ShopLayout() {
       groupLabel: 'ĐƠN HÀNG',
       items: [
         { path: '/shop/orders', label: 'Xử lý đơn hàng (Kanban)', icon: <ShoppingBag className="w-4 h-4" /> },
+        { path: '/shop/invoices', label: 'Quản lý hóa đơn', icon: <Receipt className="w-4 h-4" /> },
         { path: '/shop/shippers', label: 'Theo dõi Shipper', icon: <ArrowRightLeft className="w-4 h-4" /> },
       ],
     },
@@ -184,13 +186,6 @@ export function ShopLayout() {
               <p className="text-[11px] text-slate-400 font-medium truncate">{shop?.location_detail || shop?.area_name || 'Đang cập nhật địa chỉ...'}</p>
             </div>
           </div>
-          {shop?.id && (
-            <NotificationBell
-              recipientId={shop.id}
-              role="SHOP"
-              onNavigateToOrder={() => navigate('/shop/orders')}
-            />
-          )}
         </div>
 
         {/* Navigation items */}
@@ -320,8 +315,18 @@ export function ShopLayout() {
               </button>
             </div>
 
-            {/* Message Notification Button */}
-            <div className="pl-6 border-l border-slate-200 flex items-center">
+            {/* Notifications & Messages */}
+            <div className="pl-6 border-l border-slate-200 flex items-center gap-2">
+              {shop?.id && (
+                <NotificationBell
+                  recipientId={shop.id}
+                  role="SHOP"
+                  theme="light"
+                  onNavigateToOrder={() => navigate('/shop/orders')}
+                />
+              )}
+
+              {/* Message Notification Button */}
               <button
                 onClick={() => navigate('/shop/messages')}
                 className="relative p-2 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-slate-100 transition-colors cursor-pointer"

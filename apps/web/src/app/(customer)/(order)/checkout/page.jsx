@@ -18,7 +18,10 @@ import {
   ShieldCheckIcon,
   UserIcon,
   LockClosedIcon,
-  SparklesIcon
+  SparklesIcon,
+  QrCodeIcon,
+  DocumentDuplicateIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 
 const API = 'http://localhost:8080/api/v1';
@@ -33,11 +36,62 @@ export default function CheckoutPage() {
     setIsMounted(true);
   }, []);
   
-  // COD payment method only (as required by user)
-  const [paymentMethod, setPaymentMethod] = useState('COD');
+  // Payment methods: 'COD' | 'ONLINE' (SePay VietQR)
+  const [paymentMethod, setPaymentMethod] = useState('ONLINE');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [successOrder, setSuccessOrder] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isPaymentPaid, setIsPaymentPaid] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+
+  // Polling payment status when order is placed with ONLINE
+  useEffect(() => {
+    if (!successOrder?.id || successOrder?.paymentMethod !== 'ONLINE' || isPaymentPaid) return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`${API}/payments/status/${successOrder.id}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.data?.status === 'SUCCESS' || json?.data?.status === 'PAID') {
+            setIsPaymentPaid(true);
+            clearInterval(timer);
+          }
+        }
+      } catch (e) {
+        // ignore polling error
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [successOrder?.id, successOrder?.paymentMethod, isPaymentPaid]);
+
+  const handleCopy = (text, fieldName) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
+    }
+  };
+
+  const handleManualCheckPayment = async () => {
+    if (!successOrder?.id) return;
+    setCheckingPayment(true);
+    try {
+      const res = await fetch(`${API}/payments/status/${successOrder.id}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data?.status === 'SUCCESS' || json?.data?.status === 'PAID') {
+          setIsPaymentPaid(true);
+        } else {
+          alert('Hệ thống chưa ghi nhận tiền vào tài khoản. Quá trình kiểm tra có thể mất từ 10-30 giây sau khi chuyển khoản thành công!');
+        }
+      }
+    } catch (e) {
+      alert('Không thể kết nối đến máy chủ để kiểm tra. Vui lòng thử lại!');
+    } finally {
+      setCheckingPayment(false);
+    }
+  };
 
   // Idempotency Key - generated once per checkout session
   const [idempotencyKey, setIdempotencyKey] = useState('');
@@ -440,7 +494,7 @@ export default function CheckoutPage() {
       const payload = {
         cartId: cartToOrder.id,
         deliveryAddress: deliveryAddressMap,
-        paymentMethod: 'COD', // Locked to COD
+        paymentMethod: paymentMethod,
         orderNote: note || '',
         idempotencyKey: idempotencyKey,
         promotionCode: appliedCodes,
@@ -456,7 +510,27 @@ export default function CheckoutPage() {
 
       if (res.ok) {
         const data = await res.json();
-        setSuccessOrder(data.data || data);
+        const created = data.data || data;
+        
+        // Nếu chọn thanh toán Online qua VietQR/SePay, gọi khởi tạo transaction ở payment-service
+        if (paymentMethod === 'ONLINE') {
+          try {
+            await fetch(`${API}/payments/sepay/qr`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                orderId: created.id,
+                orderCode: created.orderCode,
+                amount: created.totalAmount,
+                userId: created.userId
+              })
+            });
+          } catch (qrErr) {
+            console.warn('SePay transaction init warning:', qrErr);
+          }
+        }
+        
+        setSuccessOrder(created);
       } else {
         const errorData = await res.json();
         setErrorMessage(errorData.message || 'Không thể tạo đơn hàng. Xin vui lòng thử lại!');
@@ -521,47 +595,219 @@ export default function CheckoutPage() {
         </Link>
 
         {successOrder ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-8 md:p-12 text-center max-w-2xl mx-auto">
-            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xs">
-              <CheckCircleIcon className="w-10 h-10" />
-            </div>
-            <h1 className="text-3xl font-black text-slate-900 mb-2">Đặt hàng COD thành công!</h1>
-            <p className="text-slate-500 mb-6">
-              Mã đơn hàng: <strong className="text-slate-900 font-mono text-lg">{successOrder.orderCode}</strong>
-            </p>
+          successOrder.paymentMethod === 'ONLINE' ? (
+            /* SEPAY VIETQR PAYMENT SCREEN */
+            <div className="bg-white rounded-2xl shadow-sm border border-blue-100 p-6 md:p-10 max-w-2xl mx-auto space-y-6">
+              {/* Header Status */}
+              <div className="text-center space-y-2">
+                {isPaymentPaid ? (
+                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xs animate-bounce">
+                    <CheckCircleIcon className="w-10 h-10" />
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-xs">
+                    <QrCodeIcon className="w-10 h-10" />
+                  </div>
+                )}
+                
+                <h1 className="text-2xl md:text-3xl font-black text-slate-900">
+                  {isPaymentPaid ? 'Thanh toán thành công! 🎉' : 'Quét mã VietQR để thanh toán'}
+                </h1>
+                
+                <p className="text-xs text-slate-500">
+                  Mã đơn hàng: <strong className="text-blue-700 font-mono text-base">{successOrder.orderCode}</strong>
+                </p>
 
-            <div className="bg-slate-50 rounded-xl p-6 mb-8 text-left space-y-2.5 text-xs text-slate-700 border border-slate-100">
-              <h3 className="font-bold text-slate-900 text-sm border-b border-slate-200 pb-2">Chi tiết đơn hàng</h3>
-              <p>Người nhận: <strong className="text-slate-900">{successOrder.customerName || fullName}</strong> ({successOrder.customerPhone || phone})</p>
-              <p>Địa chỉ giao: <strong className="text-slate-900">{typeof successOrder.deliveryAddress === 'string' ? successOrder.deliveryAddress : (successOrder.deliveryAddress?.fullAddress || '')}</strong></p>
-              <p>Hình thức: <strong className="text-emerald-700">Thanh toán khi nhận hàng (COD)</strong></p>
-              {selectedShopPromo && (
-                <p>Khuyến mãi Quán: <strong className="text-orange-600 font-mono">{selectedShopPromo.code}</strong> (Giảm {shopDiscount.toLocaleString('vi-VN')}đ)</p>
+                {/* Status Badge */}
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold mt-1">
+                  {isPaymentPaid ? (
+                    <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full flex items-center gap-1.5 border border-emerald-300">
+                      <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
+                      Đã nhận thanh toán từ SePay · Đang chuyển đến nhà hàng
+                    </span>
+                  ) : (
+                    <span className="bg-amber-100 text-amber-900 px-3 py-1 rounded-full flex items-center gap-2 border border-amber-300">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                      Đang chờ bạn quét mã... Hệ thống tự động xác nhận tức thì
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* QR Image & Bank Details Container */}
+              {!isPaymentPaid && (
+                <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                  {/* Left: QR Image */}
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    <div className="p-3 bg-white rounded-2xl border-2 border-blue-500 shadow-md">
+                      <img 
+                        src={`https://qr.sepay.vn/img?acc=025452790502&bank=MBBank&amount=${Number(successOrder.totalAmount || totalAmount)}&des=${encodeURIComponent(successOrder.orderCode)}`}
+                        alt="VietQR SePay"
+                        className="w-52 h-52 object-contain"
+                        onError={(e) => {
+                          e.currentTarget.src = `https://img.vietqr.io/image/MB-025452790502-compact2.png?amount=${Number(successOrder.totalAmount || totalAmount)}&addInfo=${encodeURIComponent(successOrder.orderCode)}&accountName=NGUYEN%20THAI%20AN`;
+                        }}
+                      />
+                    </div>
+                    <span className="text-[11px] text-slate-500 font-medium">Mở App ngân hàng bất kỳ để quét</span>
+                  </div>
+
+                  {/* Right: Bank Transfer Info with Copy buttons */}
+                  <div className="space-y-3 text-xs">
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-semibold">NGÂN HÀNG</span>
+                        <span className="font-bold text-slate-800 text-xs">MBBank (Quân Đội)</span>
+                      </div>
+                      <button 
+                        onClick={() => handleCopy('MBBank', 'bank')}
+                        className="p-1.5 hover:bg-slate-100 rounded-lg text-blue-600 font-bold flex items-center gap-1 cursor-pointer text-[11px]"
+                      >
+                        <DocumentDuplicateIcon className="w-4 h-4" />
+                        {copiedField === 'bank' ? 'Đã chép' : 'Sao chép'}
+                      </button>
+                    </div>
+
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-semibold">SỐ TÀI KHOẢN</span>
+                        <span className="font-mono font-black text-slate-900 text-sm">025452790502</span>
+                      </div>
+                      <button 
+                        onClick={() => handleCopy('025452790502', 'acc')}
+                        className="p-1.5 hover:bg-slate-100 rounded-lg text-blue-600 font-bold flex items-center gap-1 cursor-pointer text-[11px]"
+                      >
+                        <DocumentDuplicateIcon className="w-4 h-4" />
+                        {copiedField === 'acc' ? 'Đã chép' : 'Sao chép'}
+                      </button>
+                    </div>
+
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-semibold">CHỦ TÀI KHOẢN</span>
+                        <span className="font-bold text-slate-900 text-xs uppercase">NGUYEN THAI AN</span>
+                      </div>
+                      <button 
+                        onClick={() => handleCopy('NGUYEN THAI AN', 'name')}
+                        className="p-1.5 hover:bg-slate-100 rounded-lg text-blue-600 font-bold flex items-center gap-1 cursor-pointer text-[11px]"
+                      >
+                        <DocumentDuplicateIcon className="w-4 h-4" />
+                        {copiedField === 'name' ? 'Đã chép' : 'Sao chép'}
+                      </button>
+                    </div>
+
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-semibold">SỐ TIỀN</span>
+                        <span className="font-black text-red-600 text-sm">
+                          {Number(successOrder.totalAmount || totalAmount).toLocaleString('vi-VN')} đ
+                        </span>
+                      </div>
+                      <button 
+                        onClick={() => handleCopy(String(Number(successOrder.totalAmount || totalAmount)), 'amount')}
+                        className="p-1.5 hover:bg-slate-100 rounded-lg text-blue-600 font-bold flex items-center gap-1 cursor-pointer text-[11px]"
+                      >
+                        <DocumentDuplicateIcon className="w-4 h-4" />
+                        {copiedField === 'amount' ? 'Đã chép' : 'Sao chép'}
+                      </button>
+                    </div>
+
+                    <div className="p-2.5 bg-blue-50/70 rounded-xl border-2 border-blue-300 flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] text-blue-600 block font-black">NỘI DUNG CHUYỂN KHOẢN (BẮT BUỘC)</span>
+                        <span className="font-mono font-black text-blue-800 text-sm">{successOrder.orderCode}</span>
+                      </div>
+                      <button 
+                        onClick={() => handleCopy(successOrder.orderCode, 'code')}
+                        className="px-2 py-1 bg-blue-600 text-white rounded-lg font-bold flex items-center gap-1 cursor-pointer hover:bg-blue-700 text-[11px] shadow-xs"
+                      >
+                        <DocumentDuplicateIcon className="w-4 h-4" />
+                        {copiedField === 'code' ? 'Đã chép!' : 'Sao chép'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
-              {selectedPlatformPromo && (
-                <p>Khuyến mãi Sàn / Hệ Thống: <strong className="text-purple-700 font-mono">{selectedPlatformPromo.code}</strong> (Giảm {platformDiscount.toLocaleString('vi-VN')}đ)</p>
-              )}
-              <div className="border-t border-slate-200 pt-2 flex items-center justify-between text-sm font-bold">
-                <span>Số tiền thanh toán khi nhận hàng:</span>
-                <span className="text-red-600 text-lg">{Number(successOrder.totalAmount || totalAmount).toLocaleString('vi-VN')} đ</span>
+
+              {/* Guide Note */}
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+                <ExclamationCircleIcon className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Lưu ý:</strong> Vui lòng giữ nguyên <strong>Nội dung chuyển khoản ({successOrder.orderCode})</strong> để hệ thống SePay tự động ghi nhận đơn và thông báo cho quán chuẩn bị món ngay!
+                </span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                {!isPaymentPaid && (
+                  <button 
+                    onClick={handleManualCheckPayment}
+                    disabled={checkingPayment}
+                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-sm"
+                  >
+                    <ArrowPathIcon className={`w-4 h-4 ${checkingPayment ? 'animate-spin' : ''}`} />
+                    {checkingPayment ? 'Đang kiểm tra...' : 'Tôi đã chuyển khoản'}
+                  </button>
+                )}
+
+                <Link 
+                  href={`/tracking?orderCode=${successOrder.orderCode || ''}`} 
+                  className="px-6 py-3 bg-[#002B5E] hover:bg-[#001D40] text-white font-bold rounded-xl transition-colors shadow-sm text-center text-sm"
+                >
+                  Theo dõi đơn hàng
+                </Link>
+                <Link 
+                  href="/order" 
+                  className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors text-center text-sm"
+                >
+                  Tiếp tục mua hàng
+                </Link>
               </div>
             </div>
+          ) : (
+            /* COD PAYMENT CONFIRMATION SCREEN */
+            <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-8 md:p-12 text-center max-w-2xl mx-auto">
+              <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xs">
+                <CheckCircleIcon className="w-10 h-10" />
+              </div>
+              <h1 className="text-3xl font-black text-slate-900 mb-2">Đặt hàng COD thành công!</h1>
+              <p className="text-slate-500 mb-6">
+                Mã đơn hàng: <strong className="text-slate-900 font-mono text-lg">{successOrder.orderCode}</strong>
+              </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Link 
-                href={`/tracking?orderCode=${successOrder.orderCode || ''}`} 
-                className="px-8 py-3 bg-[#002B5E] hover:bg-[#001D40] text-white font-bold rounded-xl transition-colors shadow-sm"
-              >
-                Theo dõi đơn hàng
-              </Link>
-              <Link 
-                href="/order" 
-                className="px-8 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors"
-              >
-                Tiếp tục mua hàng
-              </Link>
+              <div className="bg-slate-50 rounded-xl p-6 mb-8 text-left space-y-2.5 text-xs text-slate-700 border border-slate-100">
+                <h3 className="font-bold text-slate-900 text-sm border-b border-slate-200 pb-2">Chi tiết đơn hàng</h3>
+                <p>Người nhận: <strong className="text-slate-900">{successOrder.customerName || fullName}</strong> ({successOrder.customerPhone || phone})</p>
+                <p>Địa chỉ giao: <strong className="text-slate-900">{typeof successOrder.deliveryAddress === 'string' ? successOrder.deliveryAddress : (successOrder.deliveryAddress?.fullAddress || '')}</strong></p>
+                <p>Hình thức: <strong className="text-emerald-700">Thanh toán khi nhận hàng (COD)</strong></p>
+                {selectedShopPromo && (
+                  <p>Khuyến mãi Quán: <strong className="text-orange-600 font-mono">{selectedShopPromo.code}</strong> (Giảm {shopDiscount.toLocaleString('vi-VN')}đ)</p>
+                )}
+                {selectedPlatformPromo && (
+                  <p>Khuyến mãi Sàn / Hệ Thống: <strong className="text-purple-700 font-mono">{selectedPlatformPromo.code}</strong> (Giảm {platformDiscount.toLocaleString('vi-VN')}đ)</p>
+                )}
+                <div className="border-t border-slate-200 pt-2 flex items-center justify-between text-sm font-bold">
+                  <span>Số tiền thanh toán khi nhận hàng:</span>
+                  <span className="text-red-600 text-lg">{Number(successOrder.totalAmount || totalAmount).toLocaleString('vi-VN')} đ</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link 
+                  href={`/tracking?orderCode=${successOrder.orderCode || ''}`} 
+                  className="px-8 py-3 bg-[#002B5E] hover:bg-[#001D40] text-white font-bold rounded-xl transition-colors shadow-sm"
+                >
+                  Theo dõi đơn hàng
+                </Link>
+                <Link 
+                  href="/order" 
+                  className="px-8 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors"
+                >
+                  Tiếp tục mua hàng
+                </Link>
+              </div>
             </div>
-          </div>
+          )
         ) : (
           <>
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-200">
@@ -795,27 +1041,86 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Payment Method - Locked to COD */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-3">
+                {/* Phương thức thanh toán (COD hoặc VietQR SePay) */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                       <BanknotesIcon className="w-5 h-5 text-emerald-600" />
                       Phương thức thanh toán
                     </h2>
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                      COD Tiền Mặt
+                    <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${
+                      paymentMethod === 'ONLINE' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {paymentMethod === 'ONLINE' ? '⚡ VietQR / SePay' : '💵 COD Tiền Mặt'}
                     </span>
                   </div>
 
-                  <div className="p-4 border-2 border-emerald-500 bg-emerald-50/50 rounded-xl flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
-                      <BanknotesIcon className="w-6 h-6" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Option 1: SePay VietQR */}
+                    <div 
+                      onClick={() => setPaymentMethod('ONLINE')}
+                      className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-3 ${
+                        paymentMethod === 'ONLINE' 
+                          ? 'border-blue-600 bg-blue-50/60 shadow-xs ring-1 ring-blue-500' 
+                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0 ${
+                          paymentMethod === 'ONLINE' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          <QrCodeIcon className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-black text-slate-900 uppercase">Chuyển khoản VietQR</p>
+                            <span className="text-[9px] bg-red-100 text-red-700 font-bold px-1.5 py-0.2 rounded">Tự động</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                            Quét mã QR qua mọi App Ngân hàng (MB, VCB, BIDV...) hoặc Ví điện tử. Xác nhận tức thì!
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-blue-100/50">
+                        <span className="text-blue-700 font-semibold">Tài khoản: MBBank</span>
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          paymentMethod === 'ONLINE' ? 'border-blue-600 bg-blue-600' : 'border-slate-300'
+                        }`}>
+                          {paymentMethod === 'ONLINE' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900">Thanh toán khi nhận món (COD - Cash On Delivery)</p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Bạn sẽ thanh toán số tiền cho shipper khi nhận được đúng và đủ món ăn. An toàn 100%.
-                      </p>
+
+                    {/* Option 2: COD */}
+                    <div 
+                      onClick={() => setPaymentMethod('COD')}
+                      className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between gap-3 ${
+                        paymentMethod === 'COD' 
+                          ? 'border-emerald-600 bg-emerald-50/60 shadow-xs ring-1 ring-emerald-500' 
+                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0 ${
+                          paymentMethod === 'COD' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          <BanknotesIcon className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-slate-900 uppercase">Thanh toán khi nhận (COD)</p>
+                          <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                            Thanh toán tiền mặt trực tiếp cho tài xế shipper khi nhận món ăn tận tay.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-emerald-100/50">
+                        <span className="text-emerald-700 font-semibold">Tiền mặt</span>
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          paymentMethod === 'COD' ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300'
+                        }`}>
+                          {paymentMethod === 'COD' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1183,7 +1488,9 @@ export default function CheckoutPage() {
 
                     <div className="border-t border-slate-200 pt-3 flex justify-between items-end">
                       <div>
-                        <span className="block font-bold text-slate-900 text-sm">Tổng thanh toán COD:</span>
+                        <span className="block font-bold text-slate-900 text-sm">
+                          {paymentMethod === 'ONLINE' ? 'Tổng thanh toán (VietQR):' : 'Tổng thanh toán (COD):'}
+                        </span>
                         <span className="text-[10px] text-slate-400">Đã bao gồm thuế và các phí liên quan</span>
                       </div>
                       <span className="text-2xl font-black text-red-600 leading-none">
@@ -1196,7 +1503,11 @@ export default function CheckoutPage() {
                   <button 
                     onClick={handlePlaceOrder}
                     disabled={isPlacingOrder || totalItems === 0}
-                    className="w-full py-3.5 bg-[#002B5E] hover:bg-[#001D40] text-white rounded-xl font-bold tracking-wide flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm uppercase"
+                    className={`w-full py-3.5 text-white rounded-xl font-bold tracking-wide flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm uppercase ${
+                      paymentMethod === 'ONLINE' 
+                        ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' 
+                        : 'bg-[#002B5E] hover:bg-[#001D40]'
+                    }`}
                   >
                     {isPlacingOrder ? (
                       <div className="flex items-center gap-2">
@@ -1204,7 +1515,7 @@ export default function CheckoutPage() {
                         ĐANG XỬ LÝ ĐẶT HÀNG...
                       </div>
                     ) : (
-                      'XÁC NHẬN ĐẶT HÀNG (COD)'
+                      paymentMethod === 'ONLINE' ? '⚡ XÁC NHẬN ĐẶT HÀNG & QUÉT MÃ QR' : '💵 XÁC NHẬN ĐẶT HÀNG (COD)'
                     )}
                   </button>
                   

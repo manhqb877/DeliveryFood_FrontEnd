@@ -186,15 +186,9 @@ function AIAvatar({ size = 'sm' }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function AIAgentChatBubble() {
   const { user } = useAuth();
-  const [sessionId] = useState(() => getOrCreateSessionId());
-
-  // Khởi tạo messages: ưu tiên lịch sử đã lưu, fallback về welcome message
-  // Dùng cùng sessionId (getOrCreateSessionId không tạo mới nếu đã có trong sessionStorage)
-  const [messages, setMessages] = useState(() => {
-    const sid = getOrCreateSessionId(); // trả về đúng sessionId đã có
-    const history = loadHistory(sid);
-    return history && history.length > 0 ? history : [WELCOME_MSG];
-  });
+  const [mounted, setMounted] = useState(false);
+  const [sessionId, setSessionId] = useState('');
+  const [messages, setMessages] = useState([WELCOME_MSG]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -206,12 +200,23 @@ export default function AIAgentChatBubble() {
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
 
+  // Chỉ khởi tạo session và load history ở client sau khi mounted để tránh lỗi Hydration
+  useEffect(() => {
+    setMounted(true);
+    const sid = getOrCreateSessionId();
+    setSessionId(sid);
+    const history = loadHistory(sid);
+    if (history && history.length > 0) {
+      setMessages(history);
+    }
+  }, []);
+
   // ─── Lưu lịch sử vào localStorage mỗi khi messages thay đổi ─────────────
   useEffect(() => {
-    if (messages.length > 1) { // không lưu nếu chỉ có welcome msg
+    if (mounted && sessionId && messages.length > 1) { // không lưu nếu chỉ có welcome msg
       saveHistory(sessionId, messages);
     }
-  }, [messages, sessionId]);
+  }, [messages, sessionId, mounted]);
 
   // ─── Auto-scroll ────────────────────────────────────────────────────────────
   const scrollToBottom = useCallback((smooth = true) => {
@@ -324,6 +329,8 @@ export default function AIAgentChatBubble() {
     new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
   // ─── Render ──────────────────────────────────────────────────────────────────
+  if (!mounted) return null;
+
   return (
     <>
       {/* ── Floating trigger button ── */}

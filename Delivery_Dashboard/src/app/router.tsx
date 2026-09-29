@@ -32,6 +32,7 @@ import { ShopShippersPage } from '@/features/shop/shippers/ShopShippersPage';
 import { ShopPromotionsPage } from '@/features/shop/promotions/ShopPromotionsPage';
 import { ShopReviewsPage } from '@/features/shop/reviews/ShopReviewsPage';
 import { ShopMessagesPage } from '@/features/shop/messages/ShopMessagesPage';
+import { ShopInvoicesPage } from '@/features/shop/invoices/ShopInvoicesPage';
 
 function RootLayout() {
   return (
@@ -98,6 +99,7 @@ export const router = createBrowserRouter([
           { path: 'menu/categories', element: <CategoriesPage /> },
           { path: 'menu/items', element: <MenuItemsPage /> },
           { path: 'orders', element: <ShopOrdersPage /> },
+          { path: 'invoices', element: <ShopInvoicesPage /> },
           { path: 'shippers', element: <ShopShippersPage /> },
           { path: 'promotions', element: <ShopPromotionsPage /> },
           { path: 'reviews', element: <ShopReviewsPage /> },

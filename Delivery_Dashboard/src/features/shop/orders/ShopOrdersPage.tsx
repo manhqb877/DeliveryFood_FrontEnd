@@ -88,10 +88,23 @@ function OrderTimer({ placedAt }: { placedAt: string }) {
 }
 
 // --- Payment Method Icon ---
-function PaymentIcon({ method }: { method: string }) {
-  if (method === 'ONLINE') return <span className="inline-flex items-center gap-1 text-blue-700 font-semibold"><CreditCard className="w-3 h-3" /> Online</span>;
-  if (method === 'WALLET') return <span className="inline-flex items-center gap-1 text-violet-700 font-semibold"><Wallet className="w-3 h-3" /> Ví</span>;
-  return <span className="inline-flex items-center gap-1 text-amber-700 font-semibold"><Truck className="w-3 h-3" /> COD</span>;
+function PaymentIcon({ method, status }: { method: string; status?: string }) {
+  if (method === 'ONLINE') {
+    if (status === 'PAID') {
+      return (
+        <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
+          <CreditCard className="w-3.5 h-3.5 text-emerald-600" /> Đã TT Ngân hàng
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-blue-700 font-semibold">
+        <CreditCard className="w-3.5 h-3.5 text-blue-600" /> CK Ngân hàng (Online)
+      </span>
+    );
+  }
+  if (method === 'WALLET') return <span className="inline-flex items-center gap-1 text-violet-700 font-semibold"><Wallet className="w-3.5 h-3.5" /> Ví App</span>;
+  return <span className="inline-flex items-center gap-1 text-amber-700 font-bold"><Truck className="w-3.5 h-3.5" /> Thu tiền mặt (COD)</span>;
 }
 
 // --- Single Order Card ---
@@ -138,6 +151,28 @@ function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDeta
           </div>
         </div>
         <Badge statusText={order.order_status} />
+      </div>
+
+      {/* Payment Method / Status Badge */}
+      <div className="flex items-center gap-1.5">
+        {order.payment_method === 'ONLINE' ? (
+          order.payment_status === 'PAID' ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold text-[11px] border border-emerald-300 w-full justify-center shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>💳 ĐÃ THANH TOÁN (NGÂN HÀNG)</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 font-bold text-[11px] border border-blue-300 w-full justify-center shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+              <span>💳 CHUYỂN KHOẢN NGÂN HÀNG (ONLINE)</span>
+            </div>
+          )
+        ) : (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 font-bold text-[11px] border border-amber-300 w-full justify-center shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span>💵 THU TIỀN MẶT KHI NHẬN HÀNG (COD)</span>
+          </div>
+        )}
       </div>
 
       {/* Pulse dot for new */}
@@ -230,7 +265,7 @@ function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDeta
         </div>
         <div className="text-right">
           <div className="font-bold text-slate-800 text-base">{order.total_amount.toLocaleString()} ₫</div>
-          <div className="text-[11px] mt-0.5"><PaymentIcon method={order.payment_method} /></div>
+          <div className="text-[11px] mt-0.5"><PaymentIcon method={order.payment_method} status={order.payment_status} /></div>
         </div>
       </div>
 
@@ -426,10 +461,10 @@ export function ShopOrdersPage() {
   const paginatedList = currentList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const tabs = [
-    { key: 'NEW' as const, label: 'Đơn Mới', icon: Bell, count: newOrders.length, color: 'blue', dotColor: 'bg-blue-600' },
-    { key: 'PREPARING' as const, label: 'Đang Nấu', icon: ChefHat, count: preparingOrders.length, color: 'amber', dotColor: 'bg-amber-500' },
-    { key: 'READY' as const, label: 'Chờ Lấy', icon: Flame, count: readyOrders.length, color: 'emerald', dotColor: 'bg-emerald-600' },
-    { key: 'HISTORY' as const, label: 'Lịch Sử', icon: History, count: historyOrders.length, color: 'slate', dotColor: 'bg-slate-400' },
+    { key: 'NEW' as const, label: 'Đơn Mới', icon: Bell, count: newOrders.length, activeBg: 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-200' },
+    { key: 'PREPARING' as const, label: 'Đang Nấu', icon: ChefHat, count: preparingOrders.length, activeBg: 'bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-200' },
+    { key: 'READY' as const, label: 'Chờ Lấy', icon: Flame, count: readyOrders.length, activeBg: 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-200' },
+    { key: 'HISTORY' as const, label: 'Lịch Sử', icon: History, count: historyOrders.length, activeBg: 'bg-slate-700 border-slate-700 text-white shadow-md shadow-slate-300' },
   ];
 
   return (
@@ -489,6 +524,7 @@ export function ShopOrdersPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {tabs.map(tab => {
           const Icon = tab.icon;
+          const isActive = activeTab === tab.key;
           return (
             <button
               key={tab.key}
@@ -497,16 +533,16 @@ export function ShopOrdersPage() {
                 setCurrentPage(1);
               }}
               className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
-                activeTab === tab.key
-                  ? `bg-${tab.color === 'blue' ? 'blue' : tab.color === 'amber' ? 'amber' : tab.color === 'emerald' ? 'emerald' : 'slate'}-600 border-transparent text-white shadow-md`
+                isActive
+                  ? tab.activeBg
                   : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm text-slate-700'
               }`}
             >
               <div className="flex items-center justify-between">
-                <Icon className={`w-5 h-5 ${activeTab === tab.key ? 'text-white/80' : 'text-slate-400'}`} />
-                <span className={`text-2xl font-bold ${activeTab === tab.key ? 'text-white' : 'text-slate-800'}`}>{tab.count}</span>
+                <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                <span className={`text-2xl font-black ${isActive ? 'text-white' : 'text-slate-800'}`}>{tab.count}</span>
               </div>
-              <p className={`text-xs font-semibold mt-2 ${activeTab === tab.key ? 'text-white/90' : 'text-slate-600'}`}>{tab.label}</p>
+              <p className={`text-xs font-bold mt-2 ${isActive ? 'text-white' : 'text-slate-600'}`}>{tab.label}</p>
             </button>
           );
         })}
@@ -654,7 +690,7 @@ export function ShopOrdersPage() {
               </div>
               <div>
                 <span className="text-slate-400 font-medium text-[11px]">Phương thức TT</span>
-                <p className="font-semibold text-slate-800 mt-0.5"><PaymentIcon method={detailOrder.payment_method} /></p>
+                <p className="font-semibold text-slate-800 mt-0.5"><PaymentIcon method={detailOrder.payment_method} status={detailOrder.payment_status} /></p>
               </div>
               <div>
                 <span className="text-slate-400 font-medium text-[11px]">TT Thanh Toán</span>
@@ -670,6 +706,24 @@ export function ShopOrdersPage() {
                   <p className="font-semibold text-slate-800">{new Date(detailOrder.completed_at).toLocaleString('vi-VN')}</p>
                 </div>
               )}
+            </div>
+
+            {/* Payment instruction notice for merchant and shipper */}
+            <div className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2.5 ${
+              detailOrder.payment_method === 'ONLINE' && detailOrder.payment_status === 'PAID'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                : detailOrder.payment_method === 'COD'
+                ? 'bg-amber-50 text-amber-900 border-amber-300'
+                : 'bg-blue-50 text-blue-800 border-blue-300'
+            }`}>
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>
+                {detailOrder.payment_method === 'ONLINE' && detailOrder.payment_status === 'PAID'
+                  ? '✓ Đơn hàng đã được thanh toán online thành công qua ngân hàng. Quán và Shipper tuyệt đối KHÔNG thu tiền của khách!'
+                  : detailOrder.payment_method === 'COD'
+                  ? `💵 Đơn hàng thanh toán tiền mặt (COD). Shipper cần thu đủ ${detailOrder.total_amount.toLocaleString()} ₫ từ khách khi giao hàng.`
+                  : '⏳ Đơn hàng đang chờ hệ thống xác nhận thanh toán trực tuyến.'}
+              </span>
             </div>
 
             {/* Delivery Address */}

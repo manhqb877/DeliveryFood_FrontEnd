@@ -4,6 +4,7 @@ import { ShopProfile } from '@/api/mockData';
 import { CardGridItem } from '@/components/ui/Card';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { MapPin, Phone, UserCheck, Check, X, FileText } from 'lucide-react';
 
 export function ShopApprovalsPage() {
@@ -108,6 +109,15 @@ export function ShopApprovalsPage() {
 
   // Not filtering here because we fetch by status directly from API
   const filteredShops = shops;
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter]);
+
+  const totalPages = Math.ceil(filteredShops.length / itemsPerPage);
+  const paginatedShops = filteredShops.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-6">
@@ -146,43 +156,51 @@ export function ShopApprovalsPage() {
           Không có gian hàng nào thuộc trạng thái này.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredShops.map((shop) => (
-            <CardGridItem
-              key={shop.id}
-              image={shop.cover_image_url || shop.logo_url}
-              categoryOverlay={shop.area_name}
-              statusText={shop.approval_status}
-              subBadge={`Chủ quán: ${shop.owner_name}`}
-              title={shop.shop_name}
-              subtitle={shop.shop_description}
-              metaItems={[
-                { icon: <MapPin className="w-3.5 h-3.5" />, label: shop.location_detail },
-                { icon: <Phone className="w-3.5 h-3.5" />, label: shop.phone },
-              ]}
-              detailAction={{
-                label: 'Xem hồ sơ & giấy tờ →',
-                onClick: () => setSelectedShop(shop),
-              }}
-              actions={
-                shop.approval_status === 'PENDING'
-                  ? [
-                      {
-                        icon: <Check className="w-4 h-4 text-emerald-600" />,
-                        title: 'Duyệt gian hàng',
-                        onClick: () => handleApprove(shop),
-                      },
-                      {
-                        icon: <X className="w-4 h-4 text-rose-600" />,
-                        title: 'Từ chối',
-                        onClick: () => setRejectModalShop(shop),
-                        danger: true,
-                      },
-                    ]
-                  : undefined
-              }
-            />
-          ))}
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {paginatedShops.map((shop) => (
+              <CardGridItem
+                key={shop.id}
+                image={shop.cover_image_url || shop.logo_url}
+                categoryOverlay={shop.area_name}
+                statusText={shop.approval_status}
+                subBadge={`Chủ quán: ${shop.owner_name}`}
+                title={shop.shop_name}
+                subtitle={shop.shop_description}
+                metaItems={[
+                  { icon: <MapPin className="w-3.5 h-3.5" />, label: shop.location_detail },
+                  { icon: <Phone className="w-3.5 h-3.5" />, label: shop.phone },
+                ]}
+                detailAction={{
+                  label: 'Xem hồ sơ & giấy tờ →',
+                  onClick: () => setSelectedShop(shop),
+                }}
+                actions={
+                  shop.approval_status === 'PENDING'
+                    ? [
+                        {
+                          icon: <Check className="w-4 h-4 text-emerald-600" />,
+                          title: 'Duyệt gian hàng',
+                          onClick: () => handleApprove(shop),
+                        },
+                        {
+                          icon: <X className="w-4 h-4 text-rose-600" />,
+                          title: 'Từ chối',
+                          onClick: () => setRejectModalShop(shop),
+                          danger: true,
+                        },
+                      ]
+                    : undefined
+                }
+              />
+            ))}
+          </div>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 

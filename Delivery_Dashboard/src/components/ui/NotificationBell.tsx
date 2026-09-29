@@ -26,9 +26,10 @@ interface NotificationBellProps {
   role: 'ADMIN' | 'SHOP';
   onNavigateToOrder?: (orderId: string | number) => void;
   className?: string;
+  theme?: 'dark' | 'light';
 }
 
-export function NotificationBell({ recipientId, role, onNavigateToOrder, className = '' }: NotificationBellProps) {
+export function NotificationBell({ recipientId, role, onNavigateToOrder, className = '', theme = 'light' }: NotificationBellProps) {
   const toast = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
@@ -226,7 +227,11 @@ export function NotificationBell({ recipientId, role, onNavigateToOrder, classNa
             fetchUnreadCount();
           }
         }}
-        className="relative p-2 text-slate-300 hover:text-white hover:bg-slate-800/80 rounded-xl transition-all duration-200 cursor-pointer focus:outline-none"
+        className={`relative p-2 rounded-xl transition-all duration-200 cursor-pointer focus:outline-none ${
+          theme === 'dark'
+            ? 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+            : 'text-slate-600 hover:text-blue-600 hover:bg-slate-100'
+        }`}
         title="Thông báo hệ thống"
       >
         <Bell className="w-5 h-5" />

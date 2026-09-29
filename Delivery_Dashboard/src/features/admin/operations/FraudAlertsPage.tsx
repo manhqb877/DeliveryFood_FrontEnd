@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { dbService } from '@/api/client';
 import { ShieldAlert, ShieldCheck, RefreshCw, Star, AlertTriangle, Eye } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
 
 interface FraudRecord {
   id: string;
@@ -49,6 +50,16 @@ export function FraudAlertsPage() {
   const filtered = alerts.filter(a =>
     sevFilter === 'ALL' || a.severity === sevFilter
   );
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [sevFilter]);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedList = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleDismiss = async () => {
     if (!selected) return;
@@ -139,7 +150,7 @@ export function FraudAlertsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(a => {
+          {paginatedList.map(a => {
             const sevCfg = SEV_CONFIG[a.severity] || SEV_CONFIG.LOW;
             return (
               <div key={a.id} className="bg-white rounded-2xl border border-slate-200 p-4 hover:shadow-sm transition-shadow">
@@ -186,6 +197,12 @@ export function FraudAlertsPage() {
               </div>
             );
           })}
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
