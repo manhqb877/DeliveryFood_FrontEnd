@@ -5,6 +5,7 @@ import { Table, Column } from '@/components/ui/Table';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { Bike, Check, X, Eye, FileText, AlertCircle } from 'lucide-react';
 
 export function ShipperApprovalsPage() {
@@ -43,6 +44,16 @@ export function ShipperApprovalsPage() {
   };
 
   const filteredShippers = shippers.filter((s) => statusFilter === 'ALL' || s.approval_status === statusFilter);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter]);
+
+  const totalPages = Math.ceil(filteredShippers.length / itemsPerPage);
+  const paginatedShippers = filteredShippers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   if (loading) {
     return <div className="p-8 text-center"><span className="loading text-blue-600">Đang tải danh sách tài xế...</span></div>;
@@ -170,10 +181,16 @@ export function ShipperApprovalsPage() {
 
       <Table
         columns={columns}
-        data={filteredShippers}
+        data={paginatedShippers}
         loading={loading}
         keyExtractor={(s) => s.id}
         emptyMessage="Không có tài xế thỏa điều kiện"
+      />
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
       />
 
       {/* Detail Modal */}

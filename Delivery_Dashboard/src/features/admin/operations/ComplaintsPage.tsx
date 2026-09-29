@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '@/api/client';
 import { Star, MessageSquare, User, ChevronDown, RefreshCw, Package } from 'lucide-react';
+import { Pagination } from '@/components/ui/Pagination';
 
 interface ReviewRecord {
   id: number;
@@ -40,6 +41,16 @@ export function ComplaintsPage() {
     if (ratingFilter === 'HIGH') return (r.shipper_rating != null && r.shipper_rating >= 4);
     return true;
   });
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [ratingFilter]);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedList = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const avgRating = reviews.length > 0
     ? (reviews.reduce((s, r) => s + (r.shipper_rating || 0), 0) / reviews.filter(r => r.shipper_rating).length).toFixed(1)
@@ -132,7 +143,7 @@ export function ComplaintsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(r => (
+          {paginatedList.map(r => (
             <div key={r.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-sm transition-shadow">
               <div
                 className="flex items-center gap-4 p-4 cursor-pointer"
@@ -223,6 +234,12 @@ export function ComplaintsPage() {
               )}
             </div>
           ))}
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
     </div>

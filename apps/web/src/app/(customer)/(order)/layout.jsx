@@ -1,6 +1,6 @@
 import OrderHeader from '@/components/layout/OrderHeader';
 import OrderFooter from '@/components/layout/OrderFooter';
-import FloatingActionButtons from '@/components/common/FloatingActionButtons';
+import CustomerFloatingButtons from '@/components/common/CustomerFloatingButtons';
 
 export const metadata = {
   title: 'Đặt hàng - beFood',
@@ -15,7 +15,7 @@ export default function OrderLayout({ children }) {
         {children}
       </main>
       <OrderFooter />
-      <FloatingActionButtons />
+      <CustomerFloatingButtons />
     </div>
   );
 }

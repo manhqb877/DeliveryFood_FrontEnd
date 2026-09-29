@@ -164,11 +164,6 @@ export function AdminLayout() {
               <p className="text-[11px] text-slate-400 font-medium">Admin Portal System</p>
             </div>
           </div>
-          <NotificationBell
-            recipientId={currentUser?.id || 1}
-            role="ADMIN"
-            onNavigateToOrder={() => navigate('/admin/orders')}
-          />
         </div>
 
         {/* Navigation items */}
@@ -243,12 +238,48 @@ export function AdminLayout() {
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-8 bg-[#F8FAFC]">
-        <div className="max-w-7xl mx-auto">
-          <Outlet />
-        </div>
-      </main>
+      {/* Main Area with Top Header */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-[#F8FAFC]">
+        {/* Topbar with Notification Bell & Profile info */}
+        <header className="h-14 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0 shadow-2xs z-20">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold text-slate-500">Hệ thống:</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Đang hoạt động ổn định
+            </span>
+          </div>
+
+          {/* Right Header items */}
+          <div className="flex items-center gap-4">
+            <NotificationBell
+              recipientId={currentUser?.id || 1}
+              role="ADMIN"
+              theme="light"
+              onNavigateToOrder={() => navigate('/admin/orders-monitor')}
+            />
+
+            <div className="pl-4 border-l border-slate-200 flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                {currentUser?.full_name ? currentUser.full_name.charAt(0).toUpperCase() : 'A'}
+              </div>
+              <div className="hidden sm:block text-left">
+                <p className="text-xs font-bold text-slate-800 leading-tight">
+                  {currentUser?.full_name || 'Admin Quản Trị'}
+                </p>
+                <p className="text-[10px] text-blue-600 font-medium">ADMIN HỆ THỐNG</p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-y-auto p-8 bg-[#F8FAFC]">
+          <div className="max-w-7xl mx-auto">
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

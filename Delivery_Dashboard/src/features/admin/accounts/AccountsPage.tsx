@@ -5,6 +5,7 @@ import { Table, Column } from '@/components/ui/Table';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { 
   Lock, Unlock, Key, Eye, Edit3, Save, 
   MapPin, ShoppingBag, Truck, Store, User as UserIcon, 
@@ -225,6 +226,16 @@ export function AccountsPage() {
     return matchSearch && matchRole && matchStatus;
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, roleFilter, statusFilter]);
+
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  const paginatedUsers = filteredUsers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   const columns: Column<User>[] = [
     {
       header: 'ID / SĐT',
@@ -397,10 +408,16 @@ export function AccountsPage() {
       {/* Table */}
       <Table
         columns={columns}
-        data={filteredUsers}
+        data={paginatedUsers}
         loading={loading}
         keyExtractor={(u) => u.id}
         emptyMessage="Không tìm thấy tài khoản thỏa điều kiện"
+      />
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
       />
 
       {/* View / Edit User Details Modal */}

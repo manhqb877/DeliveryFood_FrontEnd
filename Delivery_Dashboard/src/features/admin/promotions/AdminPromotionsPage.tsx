@@ -3,6 +3,7 @@ import { dbService } from '@/api/client';
 import { Promotion, ShopProfile } from '@/api/mockData';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
 import {
   Plus,
@@ -237,6 +238,22 @@ export function AdminPromotionsPage({ initialTab = 'PLATFORM' }: AdminPromotions
   );
   const allShopPromos = promotions.filter((p) => p.scope === 'SHOP');
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab]);
+
+  const totalPendingPages = Math.ceil(pendingShopPromos.length / itemsPerPage);
+  const paginatedPending = pendingShopPromos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const totalPlatformPages = Math.ceil(platformPromos.length / itemsPerPage);
+  const paginatedPlatform = platformPromos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const totalAllPages = Math.ceil(promotions.length / itemsPerPage);
+  const paginatedAll = promotions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -365,8 +382,9 @@ export function AdminPromotionsPage({ initialTab = 'PLATFORM' }: AdminPromotions
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {pendingShopPromos.map((promo) => {
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {paginatedPending.map((promo) => {
                 const shop = getShopInfo(promo.shop_id);
                 const shopName = shop?.shop_name || promo.shop_name || `Gian Hàng #${promo.shop_id || '—'}`;
                 const ownerName = shop?.owner_name || 'Chủ gian hàng';
@@ -502,7 +520,14 @@ export function AdminPromotionsPage({ initialTab = 'PLATFORM' }: AdminPromotions
                 );
               })}
             </div>
-          )}
+
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPendingPages}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
         </div>
       )}
 
@@ -521,8 +546,9 @@ export function AdminPromotionsPage({ initialTab = 'PLATFORM' }: AdminPromotions
           {loading ? (
             <div className="text-center py-12 text-slate-400 text-xs">Đang tải khuyến mãi sàn...</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {platformPromos.map((promo) => {
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {paginatedPlatform.map((promo) => {
                 const totalLimit = promo.total_limit || 500;
                 const used = promo.used_count || 0;
                 const pct = Math.min(100, Math.round((used / totalLimit) * 100));
@@ -625,7 +651,14 @@ export function AdminPromotionsPage({ initialTab = 'PLATFORM' }: AdminPromotions
                 );
               })}
             </div>
-          )}
+
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPlatformPages}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
         </div>
       )}
 
@@ -645,7 +678,7 @@ export function AdminPromotionsPage({ initialTab = 'PLATFORM' }: AdminPromotions
               </tr>
             </thead>
             <tbody>
-              {promotions.map((p) => {
+              {paginatedAll.map((p) => {
                 const shop = getShopInfo(p.shop_id);
                 return (
                   <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
@@ -717,6 +750,14 @@ export function AdminPromotionsPage({ initialTab = 'PLATFORM' }: AdminPromotions
               })}
             </tbody>
           </table>
+
+          <div className="p-4 border-t border-slate-100">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalAllPages}
+              onPageChange={setCurrentPage}
+            />
+          </div>
         </div>
       )}
 

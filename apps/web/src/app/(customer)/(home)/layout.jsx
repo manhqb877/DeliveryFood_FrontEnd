@@ -1,7 +1,7 @@
 import "leaflet/dist/leaflet.css";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import FloatingActionButtons from "@/components/common/FloatingActionButtons";
+import CustomerFloatingButtons from "@/components/common/CustomerFloatingButtons";
 
 export default function CustomerLayout({ children }) {
   return (
@@ -9,7 +9,7 @@ export default function CustomerLayout({ children }) {
       <Header />
       <main className="flex-grow">{children}</main>
       <Footer />
-      <FloatingActionButtons />
+      <CustomerFloatingButtons />
     </div>
   );
 }

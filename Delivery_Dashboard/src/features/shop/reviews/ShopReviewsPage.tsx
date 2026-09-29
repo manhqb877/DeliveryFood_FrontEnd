@@ -3,6 +3,7 @@ import { dbService } from '@/api/client';
 import { Review } from '@/api/mockData';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
 import { Star, MessageSquare, CornerDownRight, Check, ThumbsUp, Sparkles, UtensilsCrossed, Bike, Clock, User } from 'lucide-react';
 
@@ -71,6 +72,16 @@ export function ShopReviewsPage() {
     if (filterReplied === 'REPLIED' && !r.shop_reply) return false;
     return true;
   });
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterRating, filterReplied]);
+
+  const totalPages = Math.ceil(filteredReviews.length / itemsPerPage);
+  const paginatedReviews = filteredReviews.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-6">
@@ -199,7 +210,7 @@ export function ShopReviewsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredReviews.map((rev) => (
+          {paginatedReviews.map((rev) => (
             <div key={rev.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3 text-xs">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -293,6 +304,12 @@ export function ShopReviewsPage() {
               )}
             </div>
           ))}
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 

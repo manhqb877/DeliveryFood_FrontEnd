@@ -3,6 +3,7 @@ import { dbService } from '@/api/client';
 import { Promotion, PromotionRedemption, ShopProfile, Order } from '@/api/mockData';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Modal } from '@/components/ui/Modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
 import {
   Plus,
@@ -324,6 +325,16 @@ export function ShopPromotionsPage() {
     return p.approval_status === statusFilter;
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter]);
+
+  const totalPages = Math.ceil(filteredPromos.length / itemsPerPage);
+  const paginatedPromos = filteredPromos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div className="space-y-6">
       {/* Title & Anti-abuse banner */}
@@ -467,8 +478,9 @@ export function ShopPromotionsPage() {
           Không tìm thấy mã khuyến mãi nào. Hãy bấm "+ Tạo Khuyến Mãi Mới".
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredPromos.map((promo) => {
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {paginatedPromos.map((promo) => {
             const isPercent = promo.promo_type === 'PERCENT';
             const isFreeShip = promo.promo_type === 'FREE_DELIVERY';
             const discountDesc = isFreeShip
@@ -636,7 +648,14 @@ export function ShopPromotionsPage() {
             );
           })}
         </div>
-      )}
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
+      </div>
+    )}
 
       {/* ANTI-ABUSE LIVE SANDBOX (Hộp thử nghiệm chống gian lận & lạm dụng) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-4">
