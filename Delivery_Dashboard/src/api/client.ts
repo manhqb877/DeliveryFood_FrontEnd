@@ -68,7 +68,9 @@ const STORAGE_KEYS = {
   REVIEWS: 'hyperlocal_reviews',
 };
 
-export const API_HOST = import.meta.env.VITE_API_IP || (typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost');
+export const API_HOST = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+  ? 'localhost'
+  : (import.meta.env.VITE_API_IP || (typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost'));
 
 
 function getStored<T>(key: string, defaultVal: T): T {

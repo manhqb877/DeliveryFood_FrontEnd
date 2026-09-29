@@ -58,6 +58,9 @@ export function AuthProvider({ children }) {
 
     // Lắng nghe sự kiện nếu bị 401 không thể refresh token
     const handleUnauthorized = () => {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('befood_guest_session_id');
+      }
       setUser(null);
       authService.logout();
     };
@@ -101,6 +104,9 @@ export function AuthProvider({ children }) {
     try {
       await authService.logout();
     } finally {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('befood_guest_session_id');
+      }
       setUser(null);
     }
   };
