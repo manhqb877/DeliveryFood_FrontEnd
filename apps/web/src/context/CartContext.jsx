@@ -8,6 +8,13 @@ const CartContext = createContext(null);
 const CART_API = 'http://localhost:8080/api/v1/carts';
 const GUEST_SESSION_KEY = 'befood_guest_session_id';
 
+function getStoredGuestSessionId() {
+  if (typeof window === 'undefined') return null;
+  const id = localStorage.getItem(GUEST_SESSION_KEY);
+  if (!id) return null;
+  return parseInt(id, 10);
+}
+
 function getOrCreateGuestSessionId() {
   if (typeof window === 'undefined') return null;
   let id = localStorage.getItem(GUEST_SESSION_KEY);
@@ -37,17 +44,31 @@ export function CartProvider({ children }) {
     return sum + parseFloat(cart.subtotal || 0);
   }, 0);
 
-  // Lấy tất cả giỏ hàng
+  // Lấy tất cả giỏ hàng (tự động merge nếu có guestSessionId khi vừa đăng nhập)
   const fetchAllCarts = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (userId) params.append('userId', userId);
-      else if (guestSessionId) params.append('guestSessionId', guestSessionId);
-      else return;
+      const storedGuestSessionId = getStoredGuestSessionId();
+
+      if (userId) {
+        params.append('userId', userId);
+        if (storedGuestSessionId) {
+          params.append('guestSessionId', storedGuestSessionId);
+        }
+      } else if (guestSessionId) {
+        params.append('guestSessionId', guestSessionId);
+      } else {
+        return;
+      }
 
       const res = await fetch(`${CART_API}/all?${params}`);
       const data = await res.json();
       if (data.status === 200 && data.data) {
+        // Đã merge thành công vào tài khoản user, xóa guest session ID cũ
+        if (userId && storedGuestSessionId) {
+          localStorage.removeItem(GUEST_SESSION_KEY);
+        }
+
         // Hydrate imageUrl from core-service for each item in the cart
         const hydratedCarts = await Promise.all(
           data.data.map(async (cart) => {
@@ -76,6 +97,7 @@ export function CartProvider({ children }) {
   }, [userId, guestSessionId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAllCarts();
   }, [fetchAllCarts]);
 
