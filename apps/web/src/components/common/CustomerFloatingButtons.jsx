@@ -1,12 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
-import { ArrowUp, PhoneCall, ChatCircleDots } from "@phosphor-icons/react";
+import { CaretUp, PhoneCall, ChatCircleDots } from "@phosphor-icons/react";
 
 export default function CustomerFloatingButtons() {
-  const pathname = usePathname();
-  const isHome = pathname === '/';
   const [mounted, setMounted] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -48,23 +45,6 @@ export default function CustomerFloatingButtons() {
 
   if (!mounted) return null;
 
-  // On home page: keep it clean, only show minimal Scroll To Top when scrolled down
-  if (isHome) {
-    if (!isVisible) return null;
-    return (
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          type="button"
-          onClick={scrollToTop}
-          className="w-10 h-10 rounded-full bg-white/95 hover:bg-white text-gray-700 hover:text-black flex items-center justify-center shadow-lg border border-gray-200 transition-all duration-200 hover:scale-105 cursor-pointer"
-          title="Lên đầu trang"
-        >
-          <ArrowUp size={18} weight="bold" />
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed bottom-[84px] right-6 z-40 flex flex-col items-end gap-3 pointer-events-auto">
       {/* Scroll To Top Button */}
@@ -76,7 +56,7 @@ export default function CustomerFloatingButtons() {
         }`}
         title="Lên đầu trang"
       >
-        <ArrowUp size={20} weight="bold" />
+        <CaretUp size={24} weight="bold" />
       </button>
 
       {/* Message Button */}
