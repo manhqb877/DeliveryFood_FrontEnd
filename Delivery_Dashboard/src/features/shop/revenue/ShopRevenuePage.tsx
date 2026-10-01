@@ -47,6 +47,7 @@ import {
   HourlyOrderAnalysis,
 } from '@/api/mockData';
 import { dbService } from '@/api/client';
+import { useAuth } from '@/app/AuthGuard';
 
 // ============ CSV Export Helper ============
 function downloadCsv(filename: string, csvContent: string) {
@@ -831,6 +832,7 @@ export function ShopRevenuePage() {
   const [loading, setLoading] = useState(() => !((dbService as any).getCachedOrders?.()?.length));
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const { currentUser } = useAuth();
   const [periodFilter, setPeriodFilter] = useState<string>('ALL');
 
   // Date Filter States (Từ ngày — Đến ngày)
@@ -842,7 +844,7 @@ export function ShopRevenuePage() {
       setLoading(true);
     }
     try {
-      const myShop = await dbService.getMyShop();
+      const myShop = await dbService.getMyShop(forceRefresh);
       setShop(myShop);
       const currentShopId = myShop?.id || 1;
       const ownerId = myShop?.owner_id || 0;
@@ -863,8 +865,8 @@ export function ShopRevenuePage() {
   };
 
   useEffect(() => {
-    loadRevenueData();
-  }, []);
+    loadRevenueData(true);
+  }, [currentUser?.id]);
 
   // Filter orders according to custom range (Từ ngày — Đến ngày)
   const filteredOrders = orders.filter((o) => {

@@ -71,7 +71,7 @@ export function ShopLayout() {
   };
 
   useEffect(() => {
-    dbService.getMyShop().then((myShop) => {
+    dbService.getMyShop(true).then((myShop) => {
       if (myShop) {
         setShop(myShop);
         fetchUnread(myShop.id);

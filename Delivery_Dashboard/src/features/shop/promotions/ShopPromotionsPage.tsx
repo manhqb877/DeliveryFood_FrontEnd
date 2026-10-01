@@ -258,13 +258,40 @@ export function ShopPromotionsPage() {
     setSelectedPromoForHistory(promo);
     setLoadingRedemptions(true);
     let list = await dbService.getPromotionRedemptions(promo.id);
+
+    // Enrich existing redemptions with order details if missing
+    list = (list || []).map((r: any) => {
+      const matchedOrder = shopOrders.find(
+        (o) => (r.order_id && o.id === r.order_id) || (r.order_code && o.order_code === r.order_code)
+      );
+      if (matchedOrder) {
+        return {
+          ...r,
+          order_code: matchedOrder.order_code || r.order_code || `ORD-${r.order_id || r.id}`,
+          user_name: matchedOrder.customer_name || r.user_name || 'Khách hàng',
+          user_phone: matchedOrder.customer_phone || r.user_phone || '—',
+          order_value: Number(matchedOrder.total_amount ?? r.order_value ?? 0),
+          discount_amount: Number(matchedOrder.discount_amount ?? r.discount_amount ?? 0),
+          used_at: matchedOrder.placed_at || r.used_at || new Date().toISOString(),
+        };
+      }
+      return {
+        ...r,
+        order_code: r.order_code || (r.order_id ? `ORD-${r.order_id}` : '—'),
+        user_name: r.user_name || (r.user_id ? `Khách hàng #${r.user_id}` : 'Khách vãng lai'),
+        user_phone: r.user_phone || '—',
+        order_value: Number(r.order_value ?? 0),
+        discount_amount: Number(r.discount_amount ?? 0),
+        used_at: r.used_at || new Date().toISOString(),
+      };
+    });
     
-    // Also include orders that used this promotion code
+    // Also include orders that used this promotion code but might not be in redemptions list
     const matchingOrders = shopOrders.filter(
       (o) => o.promotion_code === promo.code && o.order_status !== 'CANCELLED'
     );
     matchingOrders.forEach((o) => {
-      if (!list.some((r) => r.order_code === o.order_code)) {
+      if (!list.some((r) => r.order_code === o.order_code || r.order_id === o.id)) {
         list.push({
           id: o.id,
           promotion_id: promo.id,
@@ -274,12 +301,13 @@ export function ShopPromotionsPage() {
           user_id: o.user_id || 1,
           user_name: o.customer_name || 'Khách hàng',
           user_phone: o.customer_phone || '—',
-          order_value: o.total_amount || 0,
-          discount_amount:
+          order_value: Number(o.total_amount || 0),
+          discount_amount: Number(
             o.discount_amount ||
             (promo.promo_type === 'PERCENT'
               ? Math.round((o.total_amount || 0) * (promo.discount_value / 100))
-              : promo.discount_value),
+              : promo.discount_value) || 0
+          ),
           used_at: o.placed_at || new Date().toISOString(),
         });
       }
@@ -489,7 +517,7 @@ export function ShopPromotionsPage() {
               ? 'Freeship giao hàng'
               : isPercent
               ? `Giảm ${promo.discount_value}% (Tối đa ${(promo.max_discount_amount || 0).toLocaleString()} ₫)`
-              : `Giảm ${promo.discount_value.toLocaleString()} ₫`;
+              : `Giảm ${(promo.discount_value || 0).toLocaleString()} ₫`;
 
             const totalLimit = promo.total_limit || 100;
             const usedCount = promo.used_count || 0;
@@ -557,7 +585,7 @@ export function ShopPromotionsPage() {
                     <div>
                       <p className="text-sm font-bold text-slate-800">{discountDesc}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Áp dụng đơn từ: <b className="text-slate-700">{promo.min_order_value.toLocaleString()} ₫</b>
+                        Áp dụng đơn từ: <b className="text-slate-700">{(promo.min_order_value || 0).toLocaleString()} ₫</b>
                       </p>
                     </div>
 
@@ -973,19 +1001,19 @@ export function ShopPromotionsPage() {
                 <tbody>
                   {redemptions.map((r) => (
                     <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="p-2.5 font-mono font-bold text-blue-600">{r.order_code}</td>
+                      <td className="p-2.5 font-mono font-bold text-blue-600">{r.order_code || '—'}</td>
                       <td className="p-2.5">
-                        <p className="font-semibold text-slate-800">{r.user_name}</p>
-                        <p className="text-[10px] text-slate-400">{r.user_phone}</p>
+                        <p className="font-semibold text-slate-800">{r.user_name || 'Khách hàng'}</p>
+                        <p className="text-[10px] text-slate-400">{r.user_phone || '—'}</p>
                       </td>
                       <td className="p-2.5 text-right font-medium text-slate-700">
-                        {r.order_value.toLocaleString()} ₫
+                        {(Number(r.order_value) || 0).toLocaleString()} ₫
                       </td>
                       <td className="p-2.5 text-right font-bold text-emerald-700">
-                        -{r.discount_amount.toLocaleString()} ₫
+                        -{(Number(r.discount_amount) || 0).toLocaleString()} ₫
                       </td>
                       <td className="p-2.5 text-center text-slate-500 text-[10px]">
-                        {new Date(r.used_at).toLocaleString('vi-VN')}
+                        {r.used_at ? new Date(r.used_at).toLocaleString('vi-VN') : '—'}
                       </td>
                     </tr>
                   ))}

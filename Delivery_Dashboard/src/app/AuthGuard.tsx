@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { User, initialUsers } from '@/api/mockData';
+import { dbService } from '@/api/client';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -30,6 +31,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('Error storing user:', e);
     }
+    dbService.clearMyShopCache();
+    dbService.clearAllShopCaches();
   };
 
   const setRole = (role: User['role']) => {
@@ -39,13 +42,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem(USER_KEY, JSON.stringify(updated));
     } catch (e) {}
+    dbService.clearMyShopCache();
+    dbService.clearAllShopCaches();
   };
 
   const logout = () => {
     setCurrentUser(null);
     try {
       localStorage.removeItem(USER_KEY);
+      localStorage.removeItem('hyperlocal_access_token');
+      localStorage.removeItem('auth_token');
     } catch (e) {}
+    dbService.clearMyShopCache();
+    dbService.clearAllShopCaches();
   };
 
   return (
