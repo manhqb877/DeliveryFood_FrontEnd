@@ -500,13 +500,37 @@ export default function CheckoutPage() {
         headers['X-Guest-Session-Id'] = String(guestId);
       }
 
+      let finalLat = deliveryLat;
+      let finalLng = deliveryLng;
+
+      if (!finalLat || !finalLng) {
+        try {
+          const gRes = await fetch(`https://maps.vietmap.vn/api/autocomplete/v3?apikey=809bdd000025b62b0e9710b82e28f65f6178ee698cdb1845&text=${encodeURIComponent(fullAddress)}`);
+          if (gRes.ok) {
+            const list = await gRes.json();
+            if (Array.isArray(list) && list.length > 0 && list[0]?.ref_id) {
+              const pRes = await fetch(`https://maps.vietmap.vn/api/place/v3?apikey=809bdd000025b62b0e9710b82e28f65f6178ee698cdb1845&refid=${list[0].ref_id}`);
+              if (pRes.ok) {
+                const place = await pRes.json();
+                if (place?.lat && place?.lng) {
+                  finalLat = place.lat;
+                  finalLng = place.lng;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Auto geocoding failed:', e);
+        }
+      }
+
       const deliveryAddressMap = {
         fullAddress: fullAddress,
         recipientName: fullName,
         recipientPhone: phone,
         note: note || '',
-        latitude: deliveryLat,
-        longitude: deliveryLng
+        latitude: finalLat,
+        longitude: finalLng
       };
 
       const appliedCodes = [selectedShopPromo?.code, selectedPlatformPromo?.code].filter(Boolean).join(', ') || null;
@@ -882,6 +906,8 @@ export default function CheckoutPage() {
                             onClick={() => {
                               setSelectedAddressId(addr.id);
                               parseAndFillAddress(addr.addressLine || '');
+                              if (addr.latitude) setDeliveryLat(Number(addr.latitude));
+                              if (addr.longitude) setDeliveryLng(Number(addr.longitude));
                             }}
                             className={`text-left p-3 rounded-xl border text-xs transition-all cursor-pointer ${
                               selectedAddressId === addr.id 
