@@ -40,6 +40,33 @@ function formatDistance(distKm) {
   return `${distKm.toFixed(1)} km`;
 }
 
+function LazyImage({ src, alt, className = "", wrapperClassName = "", fallbackSrc }) {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+
+  return (
+    <div className={`relative overflow-hidden ${wrapperClassName}`}>
+      {!loaded && !error && (
+        <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 animate-pulse z-0" />
+      )}
+      <img
+        src={error && fallbackSrc ? fallbackSrc : src}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          setError(true);
+          setLoaded(true);
+        }}
+        className={`${className} transition-all duration-700 ease-out ${
+          loaded ? "opacity-100 scale-100" : "opacity-0 scale-102"
+        }`}
+      />
+    </div>
+  );
+}
+
 export default function CustomerHome() {
   const [addressQuery, setAddressQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -259,7 +286,7 @@ export default function CustomerHome() {
           {/* Floating Address Box */}
           <div 
             ref={dropdownRef}
-            className="absolute top-1/2 left-4 md:left-12 lg:left-24 -translate-y-1/2 w-[92%] sm:w-[440px] md:w-[470px] bg-white rounded-3xl p-6 md:p-8 shadow-2xl z-30 border border-gray-100/80 backdrop-blur-md"
+            className="absolute top-1/2 left-4 md:left-12 lg:left-24 -translate-y-1/2 w-[92%] sm:w-[440px] md:w-[470px] bg-white rounded-3xl p-6 md:p-8 shadow-2xl z-30 border border-gray-100/80 backdrop-blur-md animate-in fade-in slide-in-from-bottom-5 duration-700 ease-out"
           >
             <h1 className="text-[24px] md:text-[30px] font-black text-gray-900 mb-4 leading-tight">
               Địa chỉ bạn muốn giao món
@@ -373,10 +400,12 @@ export default function CustomerHome() {
                       className="flex items-center justify-between p-2 rounded-xl bg-gray-50 hover:bg-amber-50/70 transition-colors border border-gray-100 group"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <img 
-                          src={shop.logoUrl || shop.coverImageUrl || "https://imgproxy.be.com.vn/preset:sharp/rs:fit:256/q:75/aHR0cDovL21lZGlh/LmJlLmNvbS52bi5z/dG9yYWdlLmdvb2ds/ZWFwaXMuY29tL2Jp/em9wcy9pbWFnZS9j/YWQxZjBkYS03MDI0/LTExZWYtYmQ2Ni1i/MjM5YzgzYTgxMjQv/dGh1bWJuYWls.webp"} 
+                        <LazyImage 
+                          src={shop.logoUrl || shop.coverImageUrl}
+                          fallbackSrc="https://imgproxy.be.com.vn/preset:sharp/rs:fit:256/q:75/aHR0cDovL21lZGlh/LmJlLmNvbS52bi5z/dG9yYWdlLmdvb2ds/ZWFwaXMuY29tL2Jp/em9wcy9pbWFnZS9j/YWQxZjBkYS03MDI0/LTExZWYtYmQ2Ni1i/MjM5YzgzYTgxMjQv/dGh1bWJuYWls.webp"
                           alt={shop.shopName}
-                          className="w-8 h-8 rounded-lg object-cover shrink-0 border border-gray-200"
+                          wrapperClassName="w-8 h-8 rounded-lg shrink-0 border border-gray-200"
+                          className="w-full h-full object-cover"
                         />
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-gray-800 truncate group-hover:text-black">
@@ -400,50 +429,7 @@ export default function CustomerHome() {
             )}
           </div>
 
-          {/* Quick Actions Dock on Right Side of Banner */}
-          <div className="hidden sm:flex absolute right-4 md:right-8 lg:right-12 bottom-5 md:bottom-8 z-20 items-center gap-1.5 bg-white/90 backdrop-blur-md p-1.5 rounded-2xl border border-white/80 shadow-lg">
-            {/* Trợ lý beFood */}
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('open-ai-chat'))}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-amber-50 text-gray-800 transition-all cursor-pointer group"
-              title="Trợ lý beFood - Gợi ý món thông minh"
-            >
-              <div className="w-7 h-7 rounded-lg bg-[#FFB700] text-black flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                <Sparkle size={15} weight="fill" />
-              </div>
-              <span className="text-xs font-bold whitespace-nowrap">Trợ lý beFood</span>
-            </button>
 
-            <div className="w-px h-5 bg-gray-200" />
-
-            {/* Nhắn tin hỗ trợ */}
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('toggle-chat'))}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-amber-50 text-gray-700 hover:text-black transition-all cursor-pointer group"
-              title="Nhắn tin với quán / hỗ trợ"
-            >
-              <div className="w-7 h-7 rounded-lg bg-gray-100 group-hover:bg-emerald-100 text-gray-600 group-hover:text-emerald-700 flex items-center justify-center shrink-0 transition-colors">
-                <ChatCircleDots size={16} weight="fill" />
-              </div>
-              <span className="text-xs font-semibold whitespace-nowrap">Hỗ trợ</span>
-            </button>
-
-            <div className="w-px h-5 bg-gray-200" />
-
-            {/* Hotline */}
-            <a
-              href="tel:19001755"
-              className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-amber-50 text-gray-700 hover:text-black transition-all cursor-pointer group"
-              title="Gọi hotline 1900 1755"
-            >
-              <div className="w-7 h-7 rounded-lg bg-gray-100 group-hover:bg-amber-100 text-gray-600 group-hover:text-amber-700 flex items-center justify-center shrink-0 transition-colors">
-                <PhoneCall size={16} weight="fill" />
-              </div>
-              <span className="text-xs font-semibold whitespace-nowrap">1900 1755</span>
-            </a>
-          </div>
         </div>
       </section>
 
@@ -493,19 +479,21 @@ export default function CustomerHome() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {nearbyShops.map((shop) => (
+              {nearbyShops.map((shop, idx) => (
                 <Link
                   key={shop.id}
                   href={`/order?shopId=${shop.id}`}
-                  className="bg-white rounded-3xl p-4 border border-gray-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col group"
+                  style={{ animationDelay: `${Math.min(idx * 75, 600)}ms` }}
+                  className="bg-white rounded-3xl p-4 border border-gray-200/80 shadow-xs hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col group animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-both"
                 >
                   {/* Shop Cover Image */}
                   <div className="relative w-full aspect-[16/10] rounded-2xl overflow-hidden bg-gray-100 mb-4">
-                    <img 
-                      src={shop.coverImageUrl || shop.logoUrl || "https://imgproxy.be.com.vn/preset:sharp/rs:fit:256/q:75/aHR0cDovL21lZGlh/LmJlLmNvbS52bi5z/dG9yYWdlLmdvb2ds/ZWFwaXMuY29tL2Jp/em9wcy9pbWFnZS9j/YWQxZjBkYS03MDI0/LTExZWYtYmQ2Ni1i/MjM5YzgzYTgxMjQv/dGh1bWJuYWls.webp"} 
+                    <LazyImage 
+                      src={shop.coverImageUrl || shop.logoUrl}
+                      fallbackSrc="https://imgproxy.be.com.vn/preset:sharp/rs:fit:256/q:75/aHR0cDovL21lZGlh/LmJlLmNvbS52bi5z/dG9yYWdlLmdvb2ds/ZWFwaXMuY29tL2Jp/em9wcy9pbWFnZS9j/YWQxZjBkYS03MDI0/LTExZWYtYmQ2Ni1i/MjM5YzgzYTgxMjQv/dGh1bWJuYWls.webp"
                       alt={shop.shopName}
+                      wrapperClassName="w-full h-full"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      loading="lazy"
                     />
 
                     {/* Distance Badge */}
@@ -568,11 +556,11 @@ export default function CustomerHome() {
         <div className="flex flex-col md:flex-row w-full items-stretch">
           {/* Left: App promo image */}
           <div className="flex-1 overflow-hidden bg-white flex items-center justify-center">
-            <img 
+            <LazyImage 
               src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSytWoYNSci8W16ofAroTpqU5xTWWu9OVx51Q6Wl3uCtw&s=10" 
               alt="beFood App Thành viên" 
-              className="h-full w-full object-cover min-h-[380px] md:min-h-[460px] max-h-[540px] transition-transform duration-700 hover:scale-102"
-              loading="lazy"
+              wrapperClassName="h-full w-full min-h-[380px] md:min-h-[460px] max-h-[540px]"
+              className="h-full w-full object-cover transition-transform duration-700 hover:scale-102"
             />
           </div>
           {/* Right: text in cream background */}
@@ -634,11 +622,11 @@ export default function CustomerHome() {
                   <span className="absolute top-3 left-3 z-10 px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-black/70 text-white backdrop-blur-xs">
                     {item.tag}
                   </span>
-                  <img 
+                  <LazyImage 
                     src={item.img} 
                     alt={item.label} 
+                    wrapperClassName="w-full h-full"
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
-                    loading="lazy" 
                   />
                 </div>
                 <p className="mt-4 text-center text-[15px] font-extrabold uppercase tracking-wide text-[#222222] group-hover:text-[var(--color-primary-dark)] transition-colors">
@@ -659,11 +647,11 @@ export default function CustomerHome() {
               className="group block overflow-hidden rounded-3xl border border-gray-200 shadow-sm hover:shadow-xl transition-all duration-300"
             >
               <div className="overflow-hidden w-full aspect-[16/10] bg-gray-100">
-                <img 
+                <LazyImage 
                   src="https://digifnb.com/wp-content/uploads/2025/02/image-1-compressed-49.jpg" 
                   alt="Thức uống đậm đà" 
+                  wrapperClassName="w-full h-full"
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
-                  loading="lazy" 
                 />
               </div>
             </Link>
@@ -673,11 +661,11 @@ export default function CustomerHome() {
               className="group block overflow-hidden rounded-3xl border border-gray-200 shadow-sm hover:shadow-xl transition-all duration-300"
             >
               <div className="overflow-hidden w-full aspect-[16/10] bg-gray-100">
-                <img 
+                <LazyImage 
                   src="https://images2.thanhnien.vn/zoom/686_429/528068263637045248/2024/12/31/thumbnail-anh-bai-pr-600-x-375-px-17356386832451405336738.png" 
                   alt="Món ăn hấp dẫn" 
+                  wrapperClassName="w-full h-full"
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
-                  loading="lazy" 
                 />
               </div>
             </Link>
@@ -706,11 +694,11 @@ export default function CustomerHome() {
             </Link>
           </div>
           <div className="flex-1 overflow-hidden bg-gray-100 flex items-center justify-center">
-            <img 
+            <LazyImage 
               src="https://www.techsignin.com/wp-content/uploads/2022/04/be-group-dich-vu-dat-do-an-befood-5.jpg" 
               alt="Cửa hàng đối tác beFood" 
-              className="h-full w-full object-cover min-h-[360px] md:min-h-[460px] max-h-[520px] transition-transform duration-700 hover:scale-102" 
-              loading="lazy" 
+              wrapperClassName="h-full w-full min-h-[360px] md:min-h-[460px] max-h-[520px]"
+              className="h-full w-full object-cover transition-transform duration-700 hover:scale-102" 
             />
           </div>
         </div>

@@ -341,31 +341,29 @@ export default function AIAgentChatBubble() {
 
   return (
     <>
-      {/* ── Floating trigger button (hidden on home page to keep clean) ── */}
-      {!isHome && (
-        <button
-          id="ai-agent-trigger-btn"
-          data-ai-bubble-toggle="true"
-          onClick={() => setIsOpen(true)}
-          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full shadow-xl
-            text-black font-extrabold text-sm transition-all duration-300 cursor-pointer
-            ${isOpen ? 'opacity-0 pointer-events-none scale-75' : 'opacity-100 scale-100'}
-            bg-[#FFB700] hover:bg-[#f5aa00] hover:shadow-2xl hover:-translate-y-0.5 border border-amber-300/60`}
-          style={{ boxShadow: isOpen ? 'none' : '0 8px 24px rgba(255,183,0,0.4)' }}
-          aria-label="Trợ lý beFood"
-        >
-          <div className="relative flex items-center">
-            <Sparkle size={18} weight="fill" className="text-black" />
-            {unread > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px]
-                rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                {unread}
-              </span>
-            )}
-          </div>
-          <span className="hidden sm:inline font-bold">Trợ lý beFood</span>
-        </button>
-      )}
+      {/* ── Floating trigger button ── */}
+      <button
+        id="ai-agent-trigger-btn"
+        data-ai-bubble-toggle="true"
+        onClick={() => setIsOpen(true)}
+        className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full shadow-xl
+          text-black font-extrabold text-sm transition-all duration-300 cursor-pointer
+          ${isOpen ? 'opacity-0 pointer-events-none scale-75' : 'opacity-100 scale-100'}
+          bg-[#FFB700] hover:bg-[#f5aa00] hover:shadow-2xl hover:-translate-y-0.5 border border-amber-300/60`}
+        style={{ boxShadow: isOpen ? 'none' : '0 8px 24px rgba(255,183,0,0.4)' }}
+        aria-label="Trợ lý beFood"
+      >
+        <div className="relative flex items-center">
+          <Sparkle size={18} weight="fill" className="text-black" />
+          {unread > 0 && (
+            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px]
+              rounded-full w-4 h-4 flex items-center justify-center font-bold">
+              {unread}
+            </span>
+          )}
+        </div>
+        <span className="font-bold">Trợ lý beFood</span>
+      </button>
 
       {/* ── Chat window ── */}
       <div
