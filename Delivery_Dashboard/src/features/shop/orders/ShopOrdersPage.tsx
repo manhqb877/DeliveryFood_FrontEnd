@@ -327,8 +327,8 @@ function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDeta
 // Main Page
 // =============================================
 export function ShopOrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [orders, setOrders] = useState<Order[]>(() => (dbService as any).getCachedOrders?.() || []);
+  const [loading, setLoading] = useState(() => !((dbService as any).getCachedOrders?.()?.length));
   const [activeTab, setActiveTab] = useState<'NEW' | 'PREPARING' | 'READY' | 'HISTORY'>('NEW');
   const [cancelModalOrder, setCancelModalOrder] = useState<Order | null>(null);
   const [cancelReasonInput, setCancelReasonInput] = useState('');
@@ -346,10 +346,10 @@ export function ShopOrdersPage() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async (forceRefresh = false) => {
     const myShop = await dbService.getMyShop();
     const currentShopId = myShop?.id || 1;
-    const list = await dbService.getOrders({ shop_id: currentShopId });
+    const list = await dbService.getOrders({ shop_id: currentShopId, forceRefresh });
     setOrders(list);
     setLastPollTime(new Date());
     setLoading(false);
@@ -357,13 +357,16 @@ export function ShopOrdersPage() {
 
   useEffect(() => {
     loadOrders();
-    const interval = setInterval(loadOrders, 4000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      loadOrders();
+    }, 6000);
 
     let channel: BroadcastChannel | null = null;
     try {
       channel = new BroadcastChannel('hyperlocal_orders');
       channel.onmessage = () => {
-        loadOrders();
+        loadOrders(true);
       };
     } catch (e) {}
 
@@ -512,7 +515,7 @@ export function ShopOrdersPage() {
           </p>
         </div>
         <button
-          onClick={loadOrders}
+          onClick={() => loadOrders(true)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-medium shadow-sm cursor-pointer"
         >
           <RefreshCw className="w-3.5 h-3.5 text-slate-500" />

@@ -8,9 +8,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Plus, Edit2, Clock, DollarSign, ListPlus, Star, ShieldCheck, Trash2, Flame, Leaf, Heart, ImagePlus, SortAsc, Zap } from 'lucide-react';
 
 export function MenuItemsPage() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Item[]>(() => (dbService as any).getCachedItems?.() || []);
+  const [categories, setCategories] = useState<Category[]>(() => (dbService as any).getCachedCategories?.() || []);
+  const [loading, setLoading] = useState(() => !((dbService as any).getCachedItems?.()?.length));
 
   // Filters
   const [search, setSearch] = useState('');
@@ -56,16 +56,23 @@ export function MenuItemsPage() {
   const [suggestedOptions, setSuggestedOptions] = useState<any[]>([]);
   const [selectedToppings, setSelectedToppings] = useState<any[]>([]);
 
-  const loadData = async () => {
-    setLoading(true);
-    const myShop = await dbService.getMyShop();
-    const currentShopId = myShop?.id || 1;
-    const iList = await dbService.getItems(currentShopId);
-    iList.sort((a, b) => (b.id || 0) - (a.id || 0));
-    const cList = await dbService.getCategories(currentShopId);
-    setItems(iList);
-    setCategories(cList);
-    setLoading(false);
+  const loadData = async (showLoading = false) => {
+    if (showLoading || items.length === 0) setLoading(true);
+    try {
+      const myShop = await dbService.getMyShop();
+      const currentShopId = myShop?.id || 1;
+      const [iList, cList] = await Promise.all([
+        dbService.getItems(currentShopId),
+        dbService.getCategories(currentShopId),
+      ]);
+      iList.sort((a: any, b: any) => (b.id || 0) - (a.id || 0));
+      setItems(iList);
+      setCategories(cList);
+    } catch (e) {
+      console.error('Error loading menu items:', e);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -78,8 +85,14 @@ export function MenuItemsPage() {
 
   const handleQuickToggleSoldOut = async (item: Item) => {
     const nextStatus = item.status === 'AVAILABLE' ? 'SOLD_OUT' : 'AVAILABLE';
-    await dbService.saveItem({ ...item, status: nextStatus });
-    loadData();
+    // Optimistic UI update
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: nextStatus } : i));
+    try {
+      await dbService.saveItem({ ...item, status: nextStatus });
+    } catch (e) {
+      console.error(e);
+      loadData(false);
+    }
   };
 
   
@@ -125,34 +138,48 @@ export function MenuItemsPage() {
       alert('Vui lòng nhập tên món và giá gốc!');
       return;
     }
-    const myShop = await dbService.getMyShop();
-    const currentShopId = myShop?.id || 1;
-    const cat = categories.find((c) => c.id === editingItem.category_id);
-    const savedItem = await dbService.saveItem({
-      ...editingItem,
-      shop_id: currentShopId,
-      category_name: cat?.name || 'Món ăn',
-    });
-    alert('Đã lưu thông tin món ăn!');
     
-    // Xử lý lưu topping
-    const finalItemId = editingItem.id || (Array.isArray(savedItem) ? savedItem[0]?.id : (savedItem as any)?.id);
-    if (finalItemId) {
-      const toAdd = selectedToppings.filter(st => !itemOptions.some(io => io.group_name === st.group_name && io.option_name === st.option_name));
-      const toRemove = itemOptions.filter(io => !selectedToppings.some(st => st.group_name === io.group_name && st.option_name === io.option_name));
-
-      for (const opt of toAdd) {
-        await (dbService as any).saveItemOption?.({ ...opt, item_id: finalItemId });
-      }
-      for (const opt of toRemove) {
-        if (opt.id) {
-          await (dbService as any).deleteItemOption?.(opt.id);
-        }
+    // Check discount_price must be less than base_price
+    if (editingItem.discount_price !== undefined && editingItem.discount_price !== null && Number(editingItem.discount_price) > 0) {
+      if (Number(editingItem.discount_price) >= Number(editingItem.base_price)) {
+        alert(`⚠️ Lỗi kiểm tra giá: Giá sau giảm (${Number(editingItem.discount_price).toLocaleString('vi-VN')}₫) phải nhỏ hơn giá cơ bản (${Number(editingItem.base_price).toLocaleString('vi-VN')}₫)! Vui lòng kiểm tra lại.`);
+        return;
       }
     }
 
-    setIsItemModalOpen(false);
-    loadData();
+    try {
+      const myShop = await dbService.getMyShop();
+      const currentShopId = myShop?.id || 1;
+      const cat = categories.find((c) => c.id === editingItem.category_id);
+      
+      // Close modal immediately for snappy feeling
+      setIsItemModalOpen(false);
+
+      const savedItem = await dbService.saveItem({
+        ...editingItem,
+        shop_id: currentShopId,
+        category_name: cat?.name || 'Món ăn',
+      });
+      
+      // Concurrently save toppings in parallel
+      const finalItemId = editingItem.id || (Array.isArray(savedItem) ? savedItem[0]?.id : (savedItem as any)?.id);
+      if (finalItemId) {
+        const toAdd = selectedToppings.filter(st => !itemOptions.some(io => io.group_name === st.group_name && io.option_name === st.option_name));
+        const toRemove = itemOptions.filter(io => !selectedToppings.some(st => st.group_name === io.group_name && st.option_name === io.option_name));
+
+        const toppingPromises = [
+          ...toAdd.map(opt => (dbService as any).saveItemOption?.({ ...opt, item_id: finalItemId })),
+          ...toRemove.map(opt => opt.id ? (dbService as any).deleteItemOption?.(opt.id) : Promise.resolve())
+        ];
+        await Promise.all(toppingPromises);
+      }
+
+      await loadData(false);
+    } catch (e: any) {
+      console.error(e);
+      alert(`Lỗi khi lưu món ăn: ${e?.message || 'Vui lòng thử lại.'}`);
+      await loadData(false);
+    }
   };
 
   // Pricing handlers
@@ -191,9 +218,16 @@ export function MenuItemsPage() {
 
   const handleDeleteItem = async (id: number) => {
     if (confirm("Bạn có chắc chắn muốn xoá món ăn này không?")) {
-      await dbService.deleteItem(id);
-      alert("Đã xoá món ăn thành công!");
-      loadData();
+      const prevItems = [...items];
+      // Optimistic delete - disappears instantly
+      setItems(prev => prev.filter(i => i.id !== id));
+      try {
+        await dbService.deleteItem(id);
+      } catch (e) {
+        console.error(e);
+        setItems(prevItems);
+        alert("Lỗi khi xoá món ăn. Vui lòng thử lại!");
+      }
     }
   };
 
@@ -470,11 +504,27 @@ export function MenuItemsPage() {
                 <input
                   type="number"
                   step="1000"
-                  value={editingItem.discount_price || ''}
-                  onChange={(e) => setEditingItem((prev) => ({ ...prev, discount_price: Number(e.target.value) }))}
-                  placeholder="Tuỳ chọn"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold text-rose-600 bg-white"
+                  value={editingItem.discount_price ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? undefined : Number(e.target.value);
+                    setEditingItem((prev) => ({ ...prev, discount_price: val }));
+                  }}
+                  placeholder="Tuỳ chọn (phải < giá cơ bản)"
+                  className={`w-full px-3 py-2 border rounded-lg text-xs font-bold bg-white transition-colors ${
+                    editingItem.discount_price && editingItem.base_price && Number(editingItem.discount_price) >= Number(editingItem.base_price)
+                      ? 'border-rose-500 bg-rose-50 text-rose-700 focus:ring-rose-200'
+                      : 'border-slate-300 text-rose-600'
+                  }`}
                 />
+                {editingItem.discount_price && editingItem.base_price && Number(editingItem.discount_price) >= Number(editingItem.base_price) ? (
+                  <p className="text-[11px] text-rose-600 font-bold mt-1">
+                    ⚠️ Giá sau giảm ({Number(editingItem.discount_price).toLocaleString('vi-VN')}₫) phải nhỏ hơn giá cơ bản ({Number(editingItem.base_price).toLocaleString('vi-VN')}₫)!
+                  </p>
+                ) : editingItem.discount_price && editingItem.base_price && Number(editingItem.discount_price) > 0 ? (
+                  <p className="text-[11px] text-emerald-600 font-medium mt-1">
+                    ✓ Giảm {Math.round((Number(editingItem.base_price) - Number(editingItem.discount_price)) / Number(editingItem.base_price) * 100)}% (tiết kiệm {(Number(editingItem.base_price) - Number(editingItem.discount_price)).toLocaleString('vi-VN')}₫)
+                  </p>
+                ) : null}
               </div>
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Trạng thái món:</label>
@@ -604,22 +654,85 @@ export function MenuItemsPage() {
           </div>
 
           {/* Nhóm 4: Topping / Tuỳ chọn (NEW) */}
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
-            <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
-              <ListPlus className="w-3.5 h-3.5 text-pink-600" />
-              Tuỳ chọn / Topping
-            </h4>
-            <div className="text-xs text-slate-500 mb-2">Tích chọn các topping bạn muốn bán kèm với món này:</div>
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-sm">
+                  <ListPlus className="w-4 h-4 text-pink-600" />
+                  Tuỳ chọn / Topping
+                </h4>
+                <div className="text-xs text-slate-500 mt-0.5">Tích chọn các topping bạn muốn bán kèm với món này:</div>
+              </div>
+              {suggestedOptions.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedToppings([...suggestedOptions])}
+                    className="text-[11px] px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-md transition cursor-pointer border border-indigo-200 shadow-xs"
+                  >
+                    + Chọn tất cả ({suggestedOptions.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedToppings([])}
+                    className="text-[11px] px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-md transition cursor-pointer border border-slate-300"
+                  >
+                    Bỏ chọn tất cả
+                  </button>
+                </div>
+              )}
+            </div>
+
             {Array.from(new Set(suggestedOptions.map(o => o.group_name))).map(groupName => {
               const groupOpts = suggestedOptions.filter(o => o.group_name === groupName);
+              const allGroupSelected = groupOpts.length > 0 && groupOpts.every(opt => 
+                selectedToppings.some(st => st.group_name === opt.group_name && st.option_name === opt.option_name)
+              );
+              const selectedCount = groupOpts.filter(opt => 
+                selectedToppings.some(st => st.group_name === opt.group_name && st.option_name === opt.option_name)
+              ).length;
+
               return (
-                <div key={String(groupName)} className="mb-4">
-                  <h5 className="font-semibold text-slate-700 text-xs mb-2 bg-white px-2 py-1 rounded border border-slate-200 inline-block">{groupName}</h5>
+                <div key={String(groupName)} className="mb-3 bg-white/80 p-3 rounded-xl border border-slate-200 shadow-xs">
+                  <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <h5 className="font-bold text-slate-800 text-xs bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 inline-block uppercase tracking-wider">
+                        {groupName}
+                      </h5>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        ({selectedCount}/{groupOpts.length} đã chọn)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (allGroupSelected) {
+                          // Deselect all in this group
+                          setSelectedToppings(prev => prev.filter(st => st.group_name !== groupName));
+                        } else {
+                          // Select all in this group
+                          const missing = groupOpts.filter(go => !selectedToppings.some(st => st.group_name === go.group_name && st.option_name === go.option_name));
+                          setSelectedToppings(prev => [...prev, ...missing]);
+                        }
+                      }}
+                      className={`text-[11px] px-2.5 py-1 rounded-md font-semibold transition cursor-pointer border ${
+                        allGroupSelected 
+                          ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100' 
+                          : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                      }`}
+                    >
+                      {allGroupSelected ? '✓ Bỏ chọn nhóm này' : '+ Chọn hết nhóm này'}
+                    </button>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {groupOpts.map((opt, idx) => {
                       const isChecked = selectedToppings.some(st => st.group_name === opt.group_name && st.option_name === opt.option_name);
                       return (
-                        <label key={idx} className="flex items-center gap-2 bg-white p-2 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+                        <label key={idx} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                          isChecked 
+                            ? 'bg-indigo-50/60 border-indigo-300 shadow-xs' 
+                            : 'bg-white border-slate-200 hover:bg-slate-50'
+                        }`}>
                           <input
                             type="checkbox"
                             checked={isChecked}
@@ -630,21 +743,21 @@ export function MenuItemsPage() {
                                 setSelectedToppings(selectedToppings.filter(st => !(st.group_name === opt.group_name && st.option_name === opt.option_name)));
                               }
                             }}
-                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                           />
-                          <div className="flex-1 flex justify-between items-center">
-                            <span className="text-xs font-medium text-slate-700">{opt.option_name}</span>
-                            <span className="text-xs font-bold text-emerald-600">+{opt.extra_price?.toLocaleString()} ₫</span>
+                          <div className="flex-1 flex justify-between items-center select-none">
+                            <span className="text-xs font-semibold text-slate-700">{opt.option_name}</span>
+                            <span className="text-xs font-bold text-emerald-600">+{opt.extra_price?.toLocaleString('vi-VN')} ₫</span>
                           </div>
                         </label>
-                      )
+                      );
                     })}
                   </div>
                 </div>
-              )
+              );
             })}
             {suggestedOptions.length === 0 && (
-              <div className="text-xs text-slate-500 italic">Danh mục này chưa có Topping nào. Hãy tạo Topping ở mục Quản lý Danh mục.</div>
+              <div className="text-xs text-slate-500 italic py-2">Danh mục này chưa có Topping nào. Hãy tạo Topping ở mục Quản lý Danh mục.</div>
             )}
           </div>
 

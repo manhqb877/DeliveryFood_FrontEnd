@@ -60,7 +60,8 @@ export default function OrderDetailsPage() {
       }
 
       const headers = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
       };
 
       if (token) {
@@ -79,7 +80,7 @@ export default function OrderDetailsPage() {
 
         // Fetch delivery tracking data if the order is active
         try {
-          const delRes = await fetch(`${API}/tracking/deliveries/order/${orderId}`);
+          const delRes = await fetch(`${API}/tracking/deliveries/order/${orderId}`, { headers });
           if (delRes.ok) {
             const delData = await delRes.json();
             setDeliveryData(delData);
@@ -100,9 +101,13 @@ export default function OrderDetailsPage() {
 
   const checkReview = async (orderId) => {
     try {
+      const headers = {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      };
       const [reviewRes, productReviewRes] = await Promise.all([
-        fetch(`${API}/reviews/order/${orderId}`),
-        fetch(`${API}/reviews/product-reviews/order/${orderId}`)
+        fetch(`${API}/reviews/order/${orderId}`, { headers }),
+        fetch(`${API}/reviews/product-reviews/order/${orderId}`, { headers })
       ]);
       if (reviewRes.ok) {
         const text = await reviewRes.text();
@@ -525,7 +530,7 @@ export default function OrderDetailsPage() {
                       <span className="text-sm font-bold text-gray-900 mb-2 block">Món ăn:</span>
                       <div className="space-y-3">
                         {existingReview.productReviews.map(pr => {
-                          const item = order.items?.find(i => i.itemId === pr.productId);
+                          const item = order.items?.find(i => (i.itemId || i.productId || i.id) === pr.productId);
                           return (
                             <div key={pr.id} className="bg-white p-3 rounded-lg border border-gray-100">
                               <div className="flex justify-between items-center mb-1">
@@ -586,8 +591,7 @@ export default function OrderDetailsPage() {
             </div>
 
             {/* Đánh giá Shipper */}
-            {deliveryData?.shipperId && (
-              <div className="mb-6 border-t pt-4">
+            <div className="mb-6 border-t pt-4">
                 <h4 className="font-bold text-gray-800 mb-2 text-sm">Tài xế giao hàng</h4>
                 <div className="flex items-center gap-1 mb-3">
                   {[1, 2, 3, 4, 5].map(s => (
@@ -606,26 +610,26 @@ export default function OrderDetailsPage() {
                   onChange={e => setReviewForm(prev => ({ ...prev, shipperComment: e.target.value }))}
                 />
               </div>
-            )}
 
             {/* Đánh giá Món ăn */}
             <div className="mb-6 border-t pt-4">
               <h4 className="font-bold text-gray-800 mb-3 text-sm">Đánh giá Món ăn</h4>
               {order.items?.map(item => {
-                const pReview = reviewForm.productReviews.find(pr => pr.productId === item.itemId) || { rating: 5, comment: '' };
+                const pId = item.itemId || item.productId || item.id;
+                const pReview = reviewForm.productReviews.find(pr => pr.productId === pId) || { rating: 5, comment: "" };
                 return (
-                  <div key={item.id} className="mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                    <p className="font-semibold text-sm text-gray-800 mb-2">{item.itemName}</p>
+                  <div key={item.id || pId} className="mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <p className="font-semibold text-sm text-gray-800 mb-2">{item.itemName || item.productName || "Món ăn"}</p>
                     <div className="flex gap-1 mb-2">
                       {[1, 2, 3, 4, 5].map(s => (
                         <Star 
-                          key={`prod-${item.id}-${s}`} 
-                          className={`w-6 h-6 cursor-pointer ${pReview.rating >= s ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
+                          key={`prod-${item.id || pId}-${s}`} 
+                          className={`w-6 h-6 cursor-pointer ${pReview.rating >= s ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
                           onClick={() => {
                             const newPrs = [...reviewForm.productReviews];
-                            const idx = newPrs.findIndex(pr => pr.productId === item.itemId);
+                            const idx = newPrs.findIndex(pr => pr.productId === pId);
                             if (idx >= 0) newPrs[idx].rating = s;
-                            else newPrs.push({ productId: item.itemId, rating: s, comment: '' });
+                            else newPrs.push({ productId: pId, rating: s, comment: "" });
                             setReviewForm(prev => ({ ...prev, productReviews: newPrs }));
                           }}
                         />
@@ -638,9 +642,9 @@ export default function OrderDetailsPage() {
                       value={pReview.comment}
                       onChange={e => {
                         const newPrs = [...reviewForm.productReviews];
-                        const idx = newPrs.findIndex(pr => pr.productId === item.itemId);
+                        const idx = newPrs.findIndex(pr => pr.productId === pId);
                         if (idx >= 0) newPrs[idx].comment = e.target.value;
-                        else newPrs.push({ productId: item.itemId, rating: 5, comment: e.target.value });
+                        else newPrs.push({ productId: pId, rating: 5, comment: e.target.value });
                         setReviewForm(prev => ({ ...prev, productReviews: newPrs }));
                       }}
                     />
@@ -665,7 +669,10 @@ export default function OrderDetailsPage() {
                     let guestId = localStorage.getItem('befood_guest_session_id');
                     try { userId = JSON.parse(localStorage.getItem('fooddelivery_user'))?.id; } catch (e) {}
 
-                    const headers = { 'Content-Type': 'application/json' };
+                    const headers = {
+                      'Content-Type': 'application/json',
+                      'ngrok-skip-browser-warning': 'true',
+                    };
                     if (token) headers['Authorization'] = `Bearer ${token}`;
                     if (userId) headers['X-User-Id'] = userId;
                     else if (guestId) headers['X-Guest-Session-Id'] = guestId;
@@ -676,11 +683,14 @@ export default function OrderDetailsPage() {
                       shopComment: reviewForm.shopComment,
                       shipperRating: reviewForm.shipperRating,
                       shipperComment: reviewForm.shipperComment,
-                      productReviews: order.items?.map(item => ({
-                        productId: item.itemId,
-                        rating: reviewForm.productReviews.find(pr => pr.productId === item.itemId)?.rating || 5,
-                        comment: reviewForm.productReviews.find(pr => pr.productId === item.itemId)?.comment || ''
-                      })) || []
+                      productReviews: order.items?.map(item => {
+                        const pId = item.itemId || item.productId || item.id;
+                        return {
+                          productId: pId,
+                          rating: reviewForm.productReviews.find(pr => pr.productId === pId)?.rating || 5,
+                          comment: reviewForm.productReviews.find(pr => pr.productId === pId)?.comment || ''
+                        };
+                      }) || []
                     };
 
                     const res = await fetch(`${API}/reviews`, {

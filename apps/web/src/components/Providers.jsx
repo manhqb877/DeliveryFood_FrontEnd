@@ -1,5 +1,6 @@
 'use client';
 
+import { LanguageProvider } from '@/context/LanguageContext';
 import { AuthProvider } from '@/context/AuthContext';
 import { CartProvider } from '@/context/CartContext';
 import { NotificationProvider } from '@/context/NotificationContext';
@@ -8,14 +9,16 @@ import ToastContainer from '@/components/common/ToastContainer';
 
 export default function Providers({ children }) {
   return (
-    <AuthProvider>
-      <NotificationProvider>
-        <CartProvider>
-          {children}
-          <CustomerChatBubble />
-          <ToastContainer />
-        </CartProvider>
-      </NotificationProvider>
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <NotificationProvider>
+          <CartProvider>
+            {children}
+            <CustomerChatBubble />
+            <ToastContainer />
+          </CartProvider>
+        </NotificationProvider>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

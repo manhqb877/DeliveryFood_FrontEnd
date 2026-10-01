@@ -4,12 +4,15 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { MinusIcon, PlusIcon, ShoppingBagIcon, ChevronDownIcon, ChevronUpIcon, BuildingStorefrontIcon, CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const { addToCart, totalItemCount } = useCart();
+  const { language, t } = useLanguage();
+  const isVi = language === 'vi';
   
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,6 +24,8 @@ export default function ProductDetailPage() {
   const [expandedGroups, setExpandedGroups] = useState({});
   
   const [recentlyViewed, setRecentlyViewed] = useState([]);
+  const [relatedProducts, setRelatedProducts] = useState([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successItem, setSuccessItem] = useState(null);
@@ -30,9 +35,17 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     if (!id) return;
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+
     const fetchProduct = async () => {
       try {
-        const response = await fetch(`http://localhost:8080/api/v1/core/items/${id}`, { cache: 'no-store' });
+        let response = await fetch(`${API_BASE}/core/items/${id}`, {
+          cache: 'no-store',
+          headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
+        if (!response.ok && API_BASE.includes("ngrok")) {
+          response = await fetch(`http://localhost:8080/api/v1/core/items/${id}`, { cache: 'no-store' });
+        }
         if (!response.ok) throw new Error("Không thể tải thông tin sản phẩm");
         const data = await response.json();
         setProduct(data);
@@ -49,7 +62,6 @@ export default function ProductDetailPage() {
           } else {
             initialOptions[groupName] = [];
           }
-          // Expand the first group by default
           initialExpanded[groupName] = idx === 0;
         });
         
@@ -58,7 +70,7 @@ export default function ProductDetailPage() {
 
         // Save to recently viewed
         const currentRecentlyViewed = JSON.parse(localStorage.getItem('recentlyViewed') || '[]');
-        const updatedRecentlyViewed = currentRecentlyViewed.filter(p => p.id !== data.id);
+        const updatedRecentlyViewed = currentRecentlyViewed.filter(p => String(p.id) !== String(data.id));
         updatedRecentlyViewed.unshift({
           id: data.id,
           name: data.name,
@@ -66,7 +78,51 @@ export default function ProductDetailPage() {
           basePrice: data.basePrice
         });
         localStorage.setItem('recentlyViewed', JSON.stringify(updatedRecentlyViewed.slice(0, 10)));
-        setRecentlyViewed(updatedRecentlyViewed.slice(1, 6)); // Show others
+        setRecentlyViewed(updatedRecentlyViewed.slice(1, 6));
+
+        // Tải sản phẩm cùng loại từ quán ăn thật
+        if (data.shopId) {
+          try {
+            setRelatedLoading(true);
+            let shopRes = await fetch(`${API_BASE}/core/shops/${data.shopId}/details`, {
+              headers: { 'ngrok-skip-browser-warning': 'true' }
+            });
+            if (!shopRes.ok && API_BASE.includes("ngrok")) {
+              shopRes = await fetch(`http://localhost:8080/api/v1/core/shops/${data.shopId}/details`);
+            }
+            if (shopRes.ok) {
+              const shopData = await shopRes.json();
+              const allShopItems = [];
+              const sameCatItems = [];
+
+              if (shopData?.categories && Array.isArray(shopData.categories)) {
+                shopData.categories.forEach((cat) => {
+                  if (cat.items && Array.isArray(cat.items)) {
+                    cat.items.forEach((item) => {
+                      if (String(item.id) !== String(data.id)) {
+                        allShopItems.push(item);
+                        if (data.categoryId && (String(item.categoryId) === String(data.categoryId) || String(cat.id) === String(data.categoryId))) {
+                          sameCatItems.push(item);
+                        }
+                      }
+                    });
+                  }
+                });
+              }
+
+              let combined = [...sameCatItems];
+              if (combined.length < 5) {
+                const remaining = allShopItems.filter((it) => !combined.some((c) => String(c.id) === String(it.id)));
+                combined = [...combined, ...remaining];
+              }
+              setRelatedProducts(combined.slice(0, 5));
+            }
+          } catch (relErr) {
+            console.error("Lỗi tải sản phẩm cùng loại:", relErr);
+          } finally {
+            setRelatedLoading(false);
+          }
+        }
 
       } catch (error) {
         console.error("Lỗi:", error);
@@ -78,7 +134,12 @@ export default function ProductDetailPage() {
 
     const fetchReviews = async () => {
       try {
-        const response = await fetch(`http://localhost:8080/api/v1/reviews/product/${id}`);
+        let response = await fetch(`${API_BASE}/reviews/product/${id}`, {
+          headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
+        if (!response.ok && API_BASE.includes("ngrok")) {
+          response = await fetch(`http://localhost:8080/api/v1/reviews/product/${id}`);
+        }
         if (response.ok) {
           const data = await response.json();
           setReviews(data);
@@ -433,27 +494,53 @@ export default function ProductDetailPage() {
           </div>
 
           <h2 className="text-2xl font-black text-[#222222] mb-6 uppercase">
-            Sản phẩm cùng loại
+            {t('product_related_title', 'SẢN PHẨM CÙNG LOẠI')}
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-5 mb-16">
-            {[
-              { id: '1', name: 'Nước Ép Cam', price: 29000, img: '/hc-assets/caphe-1.png' },
-              { id: '2', name: 'Nước Ép Dưa Hấu', price: 29000, img: '/hc-assets/caphe-2.png' },
-              { id: '3', name: 'Trà Sữa Thái', price: 35000, img: '/hc-assets/tra-1.png' },
-              { id: '4', name: 'Cà Phê Sữa Đá', price: 25000, img: '/hc-assets/caphe-3.png' },
-              { id: '5', name: 'Bạc Xỉu', price: 29000, img: '/hc-assets/caphe-1.png' },
-            ].map((prod) => (
-              <div key={prod.id} className="bg-white rounded-lg border border-gray-100 overflow-hidden hover:shadow-md transition-all group p-0">
-                <div className="relative aspect-square w-full overflow-hidden flex items-center justify-center bg-gray-50 border-b border-gray-50">
-                  <img src={prod.img} alt={prod.name} className="w-[80%] h-[80%] object-contain group-hover:scale-105 transition-transform" />
+
+          {relatedLoading ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-5 mb-16">
+              {[1, 2, 3, 4, 5].map((idx) => (
+                <div key={idx} className="bg-white rounded-xl border border-gray-100 p-3 animate-pulse">
+                  <div className="aspect-square bg-gray-100 rounded-lg mb-3"></div>
+                  <div className="h-4 bg-gray-100 rounded mb-2 w-3/4"></div>
+                  <div className="h-4 bg-gray-100 rounded w-1/2"></div>
                 </div>
-                <div className="p-4 flex flex-col relative bg-white">
-                  <h4 className="text-[14px] font-bold text-[#333] mb-2 line-clamp-2">{prod.name}</h4>
-                  <span className="text-[15px] font-bold text-[var(--color-primary-dark)]">{prod.price.toLocaleString('vi-VN')}đ</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : relatedProducts.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-5 mb-16">
+              {relatedProducts.slice(0, 5).map((prod) => (
+                <Link
+                  key={prod.id}
+                  href={`/product/${prod.id}`}
+                  className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-yellow-400/80 transition-all duration-200 group flex flex-col cursor-pointer"
+                >
+                  <div className="relative aspect-square w-full overflow-hidden flex items-center justify-center bg-gray-50 border-b border-gray-100">
+                    <img
+                      src={prod.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80'}
+                      alt={prod.name}
+                      onError={(e) => {
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80';
+                      }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                    />
+                  </div>
+                  <div className="p-3.5 flex flex-col flex-1 bg-white">
+                    <h4 className="text-[13px] font-bold text-[#333] mb-1.5 line-clamp-2 group-hover:text-[var(--color-primary-dark)] transition-colors leading-snug">
+                      {prod.name}
+                    </h4>
+                    <span className="text-[14px] font-black text-[var(--color-primary-dark)] mt-auto">
+                      {Number(prod.basePrice || prod.price || 0).toLocaleString('vi-VN')}đ
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-500 mb-16 font-medium">
+              {isVi ? 'Chưa có thêm sản phẩm cùng loại nào từ quán ăn này.' : 'No other products found from this restaurant.'}
+            </div>
+          )}
 
           {/* RECENTLY VIEWED PRODUCTS */}
           {recentlyViewed.length > 0 && (
@@ -462,17 +549,32 @@ export default function ProductDetailPage() {
                 <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Sản phẩm đã xem gần đây
+                {t('product_recently_viewed', 'SẢN PHẨM ĐÃ XEM GẦN ĐÂY')}
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-5">
                 {recentlyViewed.map((prod) => (
-                  <Link href={`/product/${prod.id}`} key={prod.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-all group">
-                    <div className="relative aspect-square w-full overflow-hidden flex items-center justify-center bg-gray-50 border-b border-gray-50">
-                      <img src={prod.imageUrl || '/hc-assets/caphe-1.png'} alt={prod.name} className="w-[80%] h-[80%] object-contain group-hover:scale-105 transition-transform" />
+                  <Link
+                    href={`/product/${prod.id}`}
+                    key={prod.id}
+                    className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-yellow-400/80 transition-all duration-200 group flex flex-col cursor-pointer"
+                  >
+                    <div className="relative aspect-square w-full overflow-hidden flex items-center justify-center bg-gray-50 border-b border-gray-100">
+                      <img
+                        src={prod.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80'}
+                        alt={prod.name}
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80';
+                        }}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      />
                     </div>
-                    <div className="p-4 flex flex-col">
-                      <h4 className="text-[14px] font-bold text-[#333] mb-2 line-clamp-2">{prod.name}</h4>
-                      <span className="text-[15px] font-bold text-gray-700">{Number(prod.basePrice || 0).toLocaleString('vi-VN')}đ</span>
+                    <div className="p-3.5 flex flex-col flex-1 bg-white">
+                      <h4 className="text-[13px] font-bold text-[#333] mb-1.5 line-clamp-2 group-hover:text-[var(--color-primary-dark)] transition-colors leading-snug">
+                        {prod.name}
+                      </h4>
+                      <span className="text-[14px] font-bold text-gray-700 mt-auto">
+                        {Number(prod.basePrice || 0).toLocaleString('vi-VN')}đ
+                      </span>
                     </div>
                   </Link>
                 ))}

@@ -28,8 +28,8 @@ import {
 
 export function ShopPromotionsPage() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
-  const [currentShop, setCurrentShop] = useState<ShopProfile | null>(null);
-  const [shopOrders, setShopOrders] = useState<Order[]>([]);
+  const [currentShop, setCurrentShop] = useState<ShopProfile | null>(() => (dbService as any).getCachedMyShop?.() || null);
+  const [shopOrders, setShopOrders] = useState<Order[]>(() => (dbService as any).getCachedOrders?.() || []);
   const [recentVoucherUsages, setRecentVoucherUsages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
@@ -72,8 +72,10 @@ export function ShopPromotionsPage() {
   } | null>(null);
   const [validating, setValidating] = useState(false);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (forceRefresh = false) => {
+    if (promotions.length === 0 || forceRefresh) {
+      setLoading(true);
+    }
     const myShop = await dbService.getMyShop();
     setCurrentShop(myShop);
     const currentShopId = myShop?.id;

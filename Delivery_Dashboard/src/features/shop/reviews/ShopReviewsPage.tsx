@@ -8,8 +8,9 @@ import { useToast } from '@/components/ui/Toast';
 import { Star, MessageSquare, CornerDownRight, Check, ThumbsUp, Sparkles, UtensilsCrossed, Bike, Clock, User } from 'lucide-react';
 
 export function ShopReviewsPage() {
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialReviews = (dbService as any).getCachedReviews?.() || [];
+  const [reviews, setReviews] = useState<Review[]>(() => initialReviews);
+  const [loading, setLoading] = useState(() => initialReviews.length === 0);
   const toast = useToast();
 
   // Filter
@@ -20,11 +21,13 @@ export function ShopReviewsPage() {
   const [selectedReview, setSelectedReview] = useState<Review | null>(null);
   const [replyInput, setReplyInput] = useState('');
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (forceRefresh = false) => {
+    if (reviews.length === 0 || forceRefresh) {
+      setLoading(true);
+    }
     const myShop = await dbService.getMyShop();
     const currentShopId = myShop?.id || 1;
-    const list = await dbService.getReviews(currentShopId);
+    const list = await dbService.getReviews(currentShopId, forceRefresh);
     setReviews(list);
     setLoading(false);
   };
@@ -46,7 +49,7 @@ export function ShopReviewsPage() {
     );
     setSelectedReview(null);
     setReplyInput('');
-    loadData();
+    loadData(true);
   };
 
   const quickTemplates = [
@@ -195,7 +198,7 @@ export function ShopReviewsPage() {
         </div>
 
         <button
-          onClick={loadData}
+          onClick={() => loadData(true)}
           className="text-xs px-3 py-1.5 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 cursor-pointer"
         >
           Làm mới

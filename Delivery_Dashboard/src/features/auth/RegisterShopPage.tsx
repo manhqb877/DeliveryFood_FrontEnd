@@ -250,7 +250,7 @@ export function RegisterShopPage() {
                       type="text"
                       value={form.phone}
                       onChange={(e) => handleChange('phone', e.target.value)}
-                      placeholder="VD: 0909123456"
+                      placeholder="0909123456"
                       className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:border-emerald-500 focus:outline-none"
                     />
                   </div>

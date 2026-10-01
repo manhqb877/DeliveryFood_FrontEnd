@@ -28,7 +28,7 @@ const API = 'http://localhost:8080/api/v1';
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { carts } = useCart();
+  const { carts, clearCart, fetchAllCarts } = useCart();
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   
   const [isMounted, setIsMounted] = useState(false);
@@ -465,18 +465,39 @@ export default function CheckoutPage() {
     if (pName && !fullAddress.includes(pName)) fullAddress += `, ${pName}`;
 
     setIsPlacingOrder(true);
+    setErrorMessage('');
     try {
       let token = null;
+      let userId = user?.id || cartToOrder?.userId || null;
+      let guestId = cartToOrder?.guestSessionId || null;
+
       if (typeof window !== 'undefined') {
         token = localStorage.getItem('fooddelivery_access_token');
+        if (!userId) {
+          const userStr = localStorage.getItem('fooddelivery_user');
+          if (userStr) {
+            try {
+              userId = JSON.parse(userStr).id;
+            } catch (e) {}
+          }
+        }
+        if (!guestId) {
+          guestId = localStorage.getItem('befood_guest_session_id');
+        }
       }
 
       const headers = { 
         'Content-Type': 'application/json',
-        'X-Idempotency-Key': idempotencyKey
+        'X-Idempotency-Key': idempotencyKey,
+        'ngrok-skip-browser-warning': 'true'
       };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
+      }
+      if (userId) {
+        headers['X-User-Id'] = String(userId);
+      } else if (guestId) {
+        headers['X-Guest-Session-Id'] = String(guestId);
       }
 
       const deliveryAddressMap = {
@@ -517,12 +538,17 @@ export default function CheckoutPage() {
           try {
             await fetch(`${API}/payments/sepay/qr`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                ...(userId ? { 'X-User-Id': String(userId) } : {})
+              },
               body: JSON.stringify({
                 orderId: created.id,
                 orderCode: created.orderCode,
                 amount: created.totalAmount,
-                userId: created.userId
+                userId: created.userId || userId
               })
             });
           } catch (qrErr) {
@@ -530,6 +556,16 @@ export default function CheckoutPage() {
           }
         }
         
+        // Dọn sạch giỏ hàng đã thanh toán
+        if (cartToOrder?.id && clearCart) {
+          try {
+            clearCart(cartToOrder.id);
+          } catch (e) {}
+        }
+        if (fetchAllCarts) {
+          fetchAllCarts();
+        }
+
         setSuccessOrder(created);
       } else {
         const errorData = await res.json();
@@ -739,16 +775,7 @@ export default function CheckoutPage() {
 
               {/* Actions */}
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-                {!isPaymentPaid && (
-                  <button 
-                    onClick={handleManualCheckPayment}
-                    disabled={checkingPayment}
-                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-sm"
-                  >
-                    <ArrowPathIcon className={`w-4 h-4 ${checkingPayment ? 'animate-spin' : ''}`} />
-                    {checkingPayment ? 'Đang kiểm tra...' : 'Tôi đã chuyển khoản'}
-                  </button>
-                )}
+
 
                 <Link 
                   href={`/tracking?orderCode=${successOrder.orderCode || ''}`} 

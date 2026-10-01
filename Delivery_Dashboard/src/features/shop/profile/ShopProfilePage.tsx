@@ -265,50 +265,53 @@ function SelectField({ label, value, onChange, options }: {
 
 // =============================================
 export function ShopProfilePage() {
-  const [shop, setShop] = useState<ShopProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialShop = (dbService as any).getCachedMyShop?.() as ShopProfile | null;
+  const [shop, setShop] = useState<ShopProfile | null>(() => initialShop);
+  const [loading, setLoading] = useState(() => !initialShop);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   // === Basic Info ===
-  const [shopName, setShopName] = useState('');
-  const [shopType, setShopType] = useState('');
-  const [description, setDescription] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [zaloLink, setZaloLink] = useState('');
-  const [facebookLink, setFacebookLink] = useState('');
+  const [shopName, setShopName] = useState(() => initialShop?.shop_name || '');
+  const [shopType, setShopType] = useState(() => initialShop?.shop_type || '');
+  const [description, setDescription] = useState(() => initialShop?.shop_description || '');
+  const [phone, setPhone] = useState(() => initialShop?.phone || '');
+  const [email, setEmail] = useState(() => initialShop?.email || '');
+  const [zaloLink, setZaloLink] = useState(() => initialShop?.zalo_link || '');
+  const [facebookLink, setFacebookLink] = useState(() => initialShop?.facebook_link || '');
 
   // === Location ===
-  const [locationDetail, setLocationDetail] = useState('');
-  const [buildingCode, setBuildingCode] = useState('');
-  const [floor, setFloor] = useState('');
-  const [unitNumber, setUnitNumber] = useState('');
+  const [locationDetail, setLocationDetail] = useState(() => initialShop?.location_detail || '');
+  const [buildingCode, setBuildingCode] = useState(() => initialShop?.building_code || '');
+  const [floor, setFloor] = useState(() => initialShop?.floor || '');
+  const [unitNumber, setUnitNumber] = useState(() => initialShop?.unit_number || '');
 
   // === Media ===
-  const [logoUrl, setLogoUrl] = useState('');
-  const [coverUrl, setCoverUrl] = useState('');
+  const [logoUrl, setLogoUrl] = useState(() => initialShop?.logo_url || '');
+  const [coverUrl, setCoverUrl] = useState(() => initialShop?.cover_image_url || '');
 
   // === Legal Docs ===
-  const [businessLicenseNumber, setBusinessLicenseNumber] = useState('');
-  const [foodSafetyCertNumber, setFoodSafetyCertNumber] = useState('');
-  const [taxId, setTaxId] = useState('');
+  const [businessLicenseNumber, setBusinessLicenseNumber] = useState(() => initialShop?.business_license_number || '');
+  const [foodSafetyCertNumber, setFoodSafetyCertNumber] = useState(() => initialShop?.food_safety_cert_number || '');
+  const [taxId, setTaxId] = useState(() => initialShop?.tax_id || '');
 
   // === Operations ===
-  const [maxConcurrentOrders, setMaxConcurrentOrders] = useState('');
-  const [avgPrepTime, setAvgPrepTime] = useState('');
-  const [minOrderValue, setMinOrderValue] = useState('');
-  const [shipperModel, setShipperModel] = useState('');
-  const [isOpen, setIsOpen] = useState(true);
-  const [isAcceptingOrders, setIsAcceptingOrders] = useState(true);
+  const [maxConcurrentOrders, setMaxConcurrentOrders] = useState(() => String(initialShop?.max_concurrent_orders || ''));
+  const [avgPrepTime, setAvgPrepTime] = useState(() => String(initialShop?.avg_prep_time_minutes || ''));
+  const [minOrderValue, setMinOrderValue] = useState(() => String(initialShop?.min_order_value || ''));
+  const [shipperModel, setShipperModel] = useState(() => initialShop?.shipper_model || 'PLATFORM');
+  const [isOpen, setIsOpen] = useState(() => initialShop?.is_open ?? true);
+  const [isAcceptingOrders, setIsAcceptingOrders] = useState(() => initialShop?.is_accepting_orders ?? true);
 
   // === Hours ===
   const [businessHours, setBusinessHours] = useState<
     Array<{ day: number; open: string; close: string; is_closed: boolean }>
-  >([]);
+  >(() => initialShop?.business_hours || []);
 
   useEffect(() => {
-    setLoading(true);
+    if (!initialShop) {
+      setLoading(true);
+    }
     dbService.getMyShop().then((s) => {
       if (!s) {
         setLoading(false);
@@ -589,7 +592,7 @@ export function ShopProfilePage() {
           <SelectField
             label="Mô hình shipper"
             value={shipperModel}
-            onChange={setShipperModel}
+            onChange={(v) => setShipperModel(v as any)}
             options={[
               { value: 'PLATFORM', label: '🚀 PLATFORM — Dùng shipper của nền tảng' },
               { value: 'SHOP_OWN', label: '🛵 SHOP_OWN — Tự có đội giao riêng' },

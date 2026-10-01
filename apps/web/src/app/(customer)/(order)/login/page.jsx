@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { authService } from '@/lib/authService';
 import { CheckCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/solid';
 
@@ -11,6 +12,7 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, register, isAuthenticated, user, logout } = useAuth();
+  const { t } = useLanguage();
 
   const [isLoginView, setIsLoginView] = useState(true);
   const [showForgotView, setShowForgotView] = useState(false);
@@ -43,13 +45,13 @@ export default function LoginPage() {
     setIsMounted(true);
   }, []);
 
-  // Tự động chuyển trang nếu đã đăng nhập từ trước
+  // Tự động chuyển trang ngay lập tức nếu đã đăng nhập
   useEffect(() => {
-    if (isAuthenticated && !isSubmitting) {
+    if (isAuthenticated) {
       const redirectUrl = searchParams.get('redirect') || '/order';
-      // Chỉ redirect nếu không có hành động nào khác
+      router.replace(redirectUrl);
     }
-  }, [isAuthenticated, isSubmitting, searchParams]);
+  }, [isAuthenticated, searchParams, router]);
 
   // Xóa thông báo lỗi khi đổi view
   const switchView = (toLogin) => {
@@ -82,13 +84,13 @@ export default function LoginPage() {
 
     setIsSubmitting(true);
     try {
-      const data = await login({
+      await login({
         phone: loginPhone.trim(),
         password: loginPassword,
       });
 
       const redirectUrl = searchParams.get('redirect') || '/order';
-      router.push(redirectUrl);
+      router.replace(redirectUrl);
     } catch (err) {
       setErrorMsg(err.message || 'Số điện thoại hoặc mật khẩu không chính xác');
       setIsSubmitting(false);
@@ -291,45 +293,17 @@ export default function LoginPage() {
 
       {/* Main Container */}
       <div className="flex-1 mx-auto w-full max-w-[520px] px-4 md:px-6 py-10">
-        
-        {/* Nếu đã đăng nhập thì hiển thị thông tin profile hiện tại */}
-        {isMounted && isAuthenticated && user && (
-          <div className="mb-6 p-4 rounded-xl border border-green-200 bg-green-50 text-center">
-            <div className="flex justify-center items-center gap-2 text-green-700 font-bold mb-1">
-              <CheckCircleIcon className="w-5 h-5" />
-              <span>Bạn đang đăng nhập</span>
-            </div>
-            <p className="text-[13px] text-gray-600 mb-3">
-              Tài khoản: <span className="font-semibold text-gray-800">{user.fullName || user.phone}</span> ({user.role})
-            </p>
-            <div className="flex justify-center gap-3">
-              <Link
-                href="/order"
-                className="px-4 py-1.5 rounded-full bg-[var(--color-primary)] text-[13px] font-bold text-black hover:opacity-90 transition-all shadow-xs"
-              >
-                Vào đặt món ngay
-              </Link>
-              <button
-                onClick={logout}
-                className="px-4 py-1.5 rounded-full bg-white border border-gray-300 text-[13px] font-medium text-gray-700 hover:bg-gray-100 transition-all"
-              >
-                Đăng xuất
-              </button>
-            </div>
-          </div>
-        )}
-
         <h1 className="text-center text-[22px] font-medium uppercase text-[#333] mb-1">
-          {showForgotView ? 'KHÔI PHỤC MẬT KHẨU' : isLoginView ? 'ĐĂNG NHẬP TÀI KHOẢN' : 'ĐĂNG KÝ TÀI KHOẢN'}
+          {showForgotView ? t('auth_forgot_title', 'KHÔI PHỤC MẬT KHẨU') : isLoginView ? t('auth_login_title', 'ĐĂNG NHẬP TÀI KHOẢN') : t('auth_register_title', 'ĐĂNG KÝ TÀI KHOẢN')}
         </h1>
 
         <div className="text-center text-[13px] text-gray-600 mb-6">
           {showForgotView ? (
-            <span>Quay lại <button type="button" onClick={() => switchView(true)} className="text-[#337ab7] hover:underline font-bold">đăng nhập</button></span>
+            <span>Quay lại <button type="button" onClick={() => switchView(true)} className="text-[#337ab7] hover:underline font-bold">{t('auth_btn_login', 'đăng nhập')}</button></span>
           ) : isLoginView ? (
-            <span>Bạn chưa có tài khoản ? <button type="button" onClick={() => switchView(false)} className="text-[#333] font-bold border-b border-[#333] hover:text-[var(--color-primary-dark)]">Đăng ký tại đây</button></span>
+            <span>{t('auth_no_account', 'Bạn chưa có tài khoản ?')} <button type="button" onClick={() => switchView(false)} className="text-[#333] font-bold border-b border-[#333] hover:text-[var(--color-primary-dark)]">{t('auth_register_here', 'Đăng ký tại đây')}</button></span>
           ) : (
-            <span>Đã có tài khoản? <button type="button" onClick={() => switchView(true)} className="text-[#333] font-bold border-b border-[#333] hover:text-[var(--color-primary-dark)]">Đăng nhập tại đây</button></span>
+            <span>{t('auth_have_account', 'Đã có tài khoản?')} <button type="button" onClick={() => switchView(true)} className="text-[#333] font-bold border-b border-[#333] hover:text-[var(--color-primary-dark)]">{t('auth_login_here', 'Đăng nhập tại đây')}</button></span>
           )}
         </div>
 
@@ -453,13 +427,13 @@ export default function LoginPage() {
           <form className="max-w-[450px] mx-auto" onSubmit={handleLoginSubmit}>
             <div className="mb-4">
               <label className="block text-[13px] font-bold text-[#333] mb-1">
-                SĐT hoặc Email <span className="text-yellow-500">*</span>
+                {t('auth_phone_or_email', 'SĐT hoặc Email')} <span className="text-yellow-500">*</span>
               </label>
               <input
                 type="text"
                 value={loginPhone}
                 onChange={(e) => setLoginPhone(e.target.value)}
-                placeholder="Nhập SĐT hoặc Email"
+                placeholder={t('auth_phone_placeholder', 'Nhập SĐT hoặc Email')}
                 required
                 disabled={isSubmitting}
                 className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
@@ -468,13 +442,13 @@ export default function LoginPage() {
 
             <div className="mb-2">
               <label className="block text-[13px] font-bold text-[#333] mb-1">
-                Mật khẩu <span className="text-yellow-500">*</span>
+                {t('auth_password', 'Mật khẩu')} <span className="text-yellow-500">*</span>
               </label>
               <input
                 type="password"
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
-                placeholder="Nhập mật khẩu"
+                placeholder={t('auth_password_placeholder', 'Nhập mật khẩu')}
                 required
                 disabled={isSubmitting}
                 className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"
@@ -482,13 +456,13 @@ export default function LoginPage() {
             </div>
 
             <div className="text-left mb-6 text-[13px]">
-              <span className="text-gray-500">Quên mật khẩu? Nhấn vào </span>
+              <span className="text-gray-500">{t('auth_forgot_password', 'Quên mật khẩu?')} {t('auth_click_here', 'Nhấn vào')} </span>
               <button
                 type="button"
                 onClick={() => setShowForgotView(true)}
                 className="text-[#337ab7] hover:underline cursor-pointer"
               >
-                đây
+                {t('auth_click_here', 'đây')}
               </button>
             </div>
 
@@ -505,7 +479,7 @@ export default function LoginPage() {
                   <span>Đang đăng nhập...</span>
                 </>
               ) : (
-                'Đăng nhập'
+                t('auth_btn_login', 'Đăng nhập')
               )}
             </button>
 
@@ -565,7 +539,7 @@ export default function LoginPage() {
                 type="tel"
                 value={regPhone}
                 onChange={(e) => setRegPhone(e.target.value)}
-                placeholder="VD: 0912345678 (10 số)"
+                placeholder="0912345678"
                 required
                 disabled={isSubmitting}
                 className="w-full border border-gray-200 rounded-[4px] px-4 py-2.5 text-[13px] outline-none focus:border-[var(--color-primary-dark)] focus:ring-1 focus:ring-[var(--color-primary-dark)] transition-all"

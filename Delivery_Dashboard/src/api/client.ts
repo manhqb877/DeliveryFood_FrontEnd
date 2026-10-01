@@ -372,9 +372,59 @@ export const dbService = {
     return dbService.getUserDetail(userId);
   },
 
-  // SHOPS
+  // GLOBAL IN-MEMORY FAST CACHES FOR TAB SWITCHING (0ms INSTANT RENDER)
+  _cachedMyShop: null as ShopProfile | null,
+  _cachedMyShopPromise: null as Promise<ShopProfile | null> | null,
+  _cachedCategories: {} as Record<number, any[]>,
+  _cachedItems: {} as Record<number, any[]>,
+  _cachedOrders: {} as Record<string, { data: any[]; time: number }>,
+  _pendingOrders: {} as Record<string, Promise<any[]>>,
+  _cachedShippers: null as any[] | null,
+  _cachedReviews: {} as Record<number, any[]>,
+
+  clearAllShopCaches: () => {
+    (dbService as any)._cachedCategories = {};
+    (dbService as any)._cachedItems = {};
+    (dbService as any)._cachedOrders = {};
+    (dbService as any)._pendingOrders = {};
+    (dbService as any)._cachedShippers = null;
+    (dbService as any)._cachedReviews = {};
+  },
+
+  clearMyShopCache: () => {
+    (dbService as any)._cachedMyShop = null;
+    (dbService as any)._cachedMyShopPromise = null;
+  },
+
+  getCachedMyShop: (): ShopProfile | null => (dbService as any)._cachedMyShop,
+  getCachedOrders: (shopId?: number): any[] | null => {
+    const sid = shopId || (dbService as any)._cachedMyShop?.id || 1;
+    return (dbService as any)._cachedOrders?.[String(sid)]?.data || null;
+  },
+  getCachedCategories: (shopId?: number): any[] | null => {
+    const sid = shopId || (dbService as any)._cachedMyShop?.id || 1;
+    return (dbService as any)._cachedCategories?.[sid] || null;
+  },
+  getCachedItems: (shopId?: number): any[] | null => {
+    const sid = shopId || (dbService as any)._cachedMyShop?.id || 1;
+    return (dbService as any)._cachedItems?.[sid] || null;
+  },
+  getCachedShippers: (): any[] | null => (dbService as any)._cachedShippers || null,
+  getCachedReviews: (shopId?: number): any[] | null => {
+    const sid = shopId || (dbService as any)._cachedMyShop?.id || 1;
+    return (dbService as any)._cachedReviews?.[sid] || null;
+  },
+
   getMyShop: async (): Promise<ShopProfile | null> => {
-    const token = getValidToken();
+    if ((dbService as any)._cachedMyShop) {
+      return (dbService as any)._cachedMyShop;
+    }
+    if ((dbService as any)._cachedMyShopPromise) {
+      return (dbService as any)._cachedMyShopPromise;
+    }
+
+    const fetchPromise = (async () => {
+      const token = getValidToken();
     const currentUserRaw = localStorage.getItem('hyperlocal_current_user');
     const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
 
@@ -448,21 +498,38 @@ export const dbService = {
       const localFound = shops.find(s => s.owner_id === currentUser.id);
       if (localFound) return localFound;
     }
-    return shops[0] || null;
+    const result = shops[0] || null;
+    return result;
+  })().then((shop) => {
+    (dbService as any)._cachedMyShop = shop;
+    (dbService as any)._cachedMyShopPromise = null;
+    return shop;
+  }).catch((err) => {
+    (dbService as any)._cachedMyShopPromise = null;
+    throw err;
+  });
+
+  (dbService as any)._cachedMyShopPromise = fetchPromise;
+  return fetchPromise;
   },
-  getShops: async (): Promise<ShopProfile[]> => {
+  getShops: async (forceRefresh?: boolean): Promise<ShopProfile[]> => {
+    if (!forceRefresh && (dbService as any)._cachedShops?.length) {
+      return (dbService as any)._cachedShops;
+    }
     try {
       const res = await fetch(`http://${API_HOST}:8080/api/v1/core/shops`);
       if (res.ok) {
         const list = await res.json();
         if (Array.isArray(list) && list.length > 0) {
-          return list.map(mapBackendShopToProfile);
+          const mapped = list.map(mapBackendShopToProfile);
+          (dbService as any)._cachedShops = mapped;
+          return mapped;
         }
       }
     } catch (e) {
       console.warn('Using local shops');
     }
-    return [];
+    return (dbService as any)._cachedShops || [];
   },
   getShopById: async (id: number): Promise<ShopProfile> => {
     try {
@@ -696,7 +763,10 @@ export const dbService = {
   },
 
   // SHIPPERS
-  getShippers: async (): Promise<ShipperProfile[]> => {
+  getShippers: async (forceRefresh?: boolean): Promise<ShipperProfile[]> => {
+    if (!forceRefresh && (dbService as any)._cachedShippers) {
+      return (dbService as any)._cachedShippers;
+    }
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
       const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/shippers`, {
@@ -706,12 +776,14 @@ export const dbService = {
       });
       if (res.ok) {
         const resData = await res.json();
-        return Array.isArray(resData.data) ? resData.data : (Array.isArray(resData) ? resData : []);
+        const list = Array.isArray(resData.data) ? resData.data : (Array.isArray(resData) ? resData : []);
+        (dbService as any)._cachedShippers = list;
+        return list;
       }
     } catch (e) {
       console.error(e);
     }
-    return [];
+    return (dbService as any)._cachedShippers || [];
   },
   approveShipper: async (shipperId: number, approved: boolean, reason?: string) => {
     try {
@@ -723,14 +795,18 @@ export const dbService = {
         }
       });
       if (res.ok) {
-        const updated = await dbService.getShippers();
+        (dbService as any)._cachedShippers = null;
+        const updated = await dbService.getShippers(true);
         setStored(STORAGE_KEYS.SHIPPERS, updated);
         return updated;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || `Lỗi xử lý tài xế (mã: ${res.status})`);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("approveShipper error:", e);
+      throw e;
     }
-    return [];
   },
 
   // AREAS & INTRA ZONES
@@ -794,30 +870,40 @@ export const dbService = {
   // CATEGORIES
   getCategories: async (shopId: number) => {
     try {
-      let targetShopId = shopId;
-      if (!targetShopId) {
-        const token = getValidToken();
-        if (token) {
-          const meRes = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (meRes.status === 401) {
-            localStorage.removeItem('hyperlocal_access_token');
-          } else if (meRes.ok) {
-            const meData = await meRes.json();
-            if (meData?.data?.id) {
-              targetShopId = meData.data.id;
-            }
-          }
-        }
-      }
-      targetShopId = targetShopId || 1;
+      let targetShopId = shopId || (dbService as any)._cachedMyShop?.id || 1;
       
+      // Fast cache return (0ms)
+      if ((dbService as any)._cachedCategories?.[targetShopId]) {
+        return (dbService as any)._cachedCategories[targetShopId];
+      }
+
       const res = await fetch(`http://${API_HOST}:8080/api/v1/core/categories/shop/${targetShopId}`);
       if (res.ok) {
         const json = await res.json();
-        if (json.data) {
-          return json.data;
+        if (json.data && Array.isArray(json.data)) {
+          const mapped = json.data.map((cat: any) => ({
+            ...cat,
+            id: cat.id,
+            shop_id: cat.shopId || targetShopId,
+            shopId: cat.shopId || targetShopId,
+            name: cat.name || '',
+            description: cat.description || '',
+            image_url: cat.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300',
+            imageUrl: cat.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300',
+            icon_emoji: cat.iconEmoji || '🍲',
+            iconEmoji: cat.iconEmoji || '🍲',
+            sort_order: cat.sortOrder ?? 1,
+            sortOrder: cat.sortOrder ?? 1,
+            is_active: cat.isActive ?? true,
+            isActive: cat.isActive ?? true,
+            available_from: cat.availableFrom ? String(cat.availableFrom).substring(0, 5) : '',
+            availableFrom: cat.availableFrom ? String(cat.availableFrom).substring(0, 5) : '',
+            available_until: cat.availableUntil ? String(cat.availableUntil).substring(0, 5) : '',
+            availableUntil: cat.availableUntil ? String(cat.availableUntil).substring(0, 5) : '',
+          }));
+          (dbService as any)._cachedCategories = (dbService as any)._cachedCategories || {};
+          (dbService as any)._cachedCategories[targetShopId] = mapped;
+          return mapped;
         }
       }
     } catch (e) {
@@ -833,20 +919,48 @@ export const dbService = {
         : `http://${API_HOST}:8080/api/v1/core/categories`;
       const method = isUpdate ? 'PUT' : 'POST';
 
+      const token = getValidToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // Format payload in camelCase as required by CategoryRequest in core-service
+      const payload: any = {
+        shopId: category.shop_id || (category as any).shopId || 1,
+        name: category.name?.trim() || '',
+        description: category.description || '',
+        imageUrl: category.image_url || (category as any).imageUrl || '',
+        iconEmoji: category.icon_emoji || (category as any).iconEmoji || '🍲',
+        sortOrder: Number(category.sort_order ?? (category as any).sortOrder ?? 1),
+        isActive: (category.is_active ?? (category as any).isActive) !== false,
+      };
+
+      const fromVal = category.available_from || (category as any).availableFrom;
+      if (fromVal) {
+        payload.availableFrom = fromVal.length === 5 ? `${fromVal}:00` : fromVal;
+      }
+      const untilVal = category.available_until || (category as any).availableUntil;
+      if (untilVal) {
+        payload.availableUntil = untilVal.length === 5 ? `${untilVal}:00` : untilVal;
+      }
+
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(category)
+        headers,
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         const json = await res.json();
         return json.data;
       }
-      console.warn('Failed to save category', await res.text());
+      const errText = await res.text();
+      console.warn('Failed to save category', errText);
+      throw new Error(errText || 'Lỗi lưu danh mục từ máy chủ');
     } catch (e) {
       console.error(e);
+      throw e;
     }
-    return null;
   },
   deleteCategory: async (id: number) => {
     try {
@@ -865,24 +979,12 @@ export const dbService = {
   // ITEMS
   getItems: async (shopId: number) => {
     try {
-      let targetShopId = shopId;
-      if (!targetShopId) {
-        const token = getValidToken();
-        if (token) {
-          const meRes = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (meRes.status === 401) {
-            localStorage.removeItem('hyperlocal_access_token');
-          } else if (meRes.ok) {
-            const meData = await meRes.json();
-            if (meData?.data?.id) {
-              targetShopId = meData.data.id;
-            }
-          }
-        }
+      let targetShopId = shopId || (dbService as any)._cachedMyShop?.id || 1;
+
+      // Fast cache return (0ms)
+      if ((dbService as any)._cachedItems?.[targetShopId]) {
+        return (dbService as any)._cachedItems[targetShopId];
       }
-      targetShopId = targetShopId || 1;
 
       const res = await fetch(`http://${API_HOST}:8080/api/v1/core/shops/${targetShopId}/details`);
       if (res.ok) {
@@ -914,6 +1016,8 @@ export const dbService = {
               });
             }
           });
+          (dbService as any)._cachedItems = (dbService as any)._cachedItems || {};
+          (dbService as any)._cachedItems[targetShopId] = items;
           return items;
         }
       }
@@ -1153,31 +1257,32 @@ export const dbService = {
   },
 
   // ORDERS & FSM
-  getOrders: async (filters?: { shop_id?: number; area_id?: number; status?: string }) => {
+  getOrders: async (filters?: { shop_id?: number; area_id?: number; status?: string; forceRefresh?: boolean }) => {
     try {
-      let targetShopId = filters?.shop_id;
-      if (!targetShopId) {
-        const token = getValidToken();
-        if (token) {
-          try {
-            const meRes = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (meRes.status === 401) {
-              localStorage.removeItem('hyperlocal_access_token');
-              localStorage.removeItem('auth_token');
-            } else if (meRes.ok) {
-              const meData = await meRes.json();
-              if (meData?.data?.id) {
-                targetShopId = meData.data.id;
-              }
-            }
-          } catch (e) {}
-        }
+      let targetShopId = filters?.shop_id || (dbService as any)._cachedMyShop?.id || 1;
+      const cacheKey = String(targetShopId);
+
+      // Fast cache return (0ms) if fresh within 5s and not forcing refresh
+      const cached = (dbService as any)._cachedOrders?.[cacheKey];
+      if (!filters?.forceRefresh && cached && (Date.now() - cached.time < 5000)) {
+        let orders = [...cached.data];
+        if (filters?.area_id) orders = orders.filter(o => o.area_id === filters.area_id);
+        if (filters?.status) orders = orders.filter(o => o.order_status === filters.status);
+        return orders;
+      }
+
+      // In-flight deduplication: reuse running promise if another component just requested it
+      if ((dbService as any)._pendingOrders?.[cacheKey]) {
+        const data = await (dbService as any)._pendingOrders[cacheKey];
+        let orders = [...data];
+        if (filters?.area_id) orders = orders.filter(o => o.area_id === filters.area_id);
+        if (filters?.status) orders = orders.filter(o => o.order_status === filters.status);
+        return orders;
       }
 
       if (targetShopId) {
-        const res = await fetch(`http://${API_HOST}:8080/api/v1/orders/shop/${targetShopId}`);
+        const fetchPromise = (async () => {
+          const res = await fetch(`http://${API_HOST}:8080/api/v1/orders/shop/${targetShopId}`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {
@@ -1230,11 +1335,24 @@ export const dbService = {
               }))
             }));
             
-            if (filters?.area_id) orders = orders.filter(o => o.area_id === filters.area_id);
-            if (filters?.status) orders = orders.filter(o => o.order_status === filters.status);
+            (dbService as any)._cachedOrders = (dbService as any)._cachedOrders || {};
+            (dbService as any)._cachedOrders[cacheKey] = { data: orders, time: Date.now() };
             return orders;
           }
         }
+        return [];
+      })().finally(() => {
+          delete (dbService as any)._pendingOrders?.[cacheKey];
+        });
+
+        (dbService as any)._pendingOrders = (dbService as any)._pendingOrders || {};
+        (dbService as any)._pendingOrders[cacheKey] = fetchPromise;
+        const freshOrders = await fetchPromise;
+
+        let resultOrders = [...freshOrders];
+        if (filters?.area_id) resultOrders = resultOrders.filter(o => o.area_id === filters.area_id);
+        if (filters?.status) resultOrders = resultOrders.filter(o => o.order_status === filters.status);
+        return resultOrders;
       }
     } catch (e) {
       console.warn('Backend server unreachable for orders, using local storage', e);
@@ -1311,6 +1429,15 @@ export const dbService = {
   },
 
   updateOrderStatus: async (orderId: number, newStatus: Order['order_status'], actor: string, reason?: string) => {
+    // Optimistically update memory cache immediately
+    if ((dbService as any)._cachedOrders) {
+      Object.keys((dbService as any)._cachedOrders).forEach(k => {
+        const entry = (dbService as any)._cachedOrders[k];
+        if (entry && Array.isArray(entry.data)) {
+          entry.data = entry.data.map((o: any) => o.id === orderId ? { ...o, order_status: newStatus } : o);
+        }
+      });
+    }
     try {
       await fetch(`http://${API_HOST}:8080/api/v1/orders/${orderId}/status`, {
         method: 'PUT',
@@ -1440,7 +1567,10 @@ export const dbService = {
   },
 
   // COMMISSIONS & COD & TRANSACTIONS
-  getCommissionConfigs: async () => {
+  getCommissionConfigs: async (forceRefresh?: boolean) => {
+    if (!forceRefresh && (dbService as any)._cachedCommissionConfigs) {
+      return (dbService as any)._cachedCommissionConfigs;
+    }
     try {
       const token = localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token');
       const res = await fetch(`http://localhost:8080/api/v1/commission-configs/admin/all`, {
@@ -1449,18 +1579,21 @@ export const dbService = {
       if (res.ok) {
         const json = await res.json();
         const arr = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
-        return arr.map((d: any) => ({
+        const mapped = arr.map((d: any) => ({
           id: d.id,
           shop_id: d.shopId || d.shop_id,
+          shop_name: d.shopName || d.shop_name,
           area_id: d.areaId || d.area_id,
           commission_type: d.commissionType || d.commission_type,
           rate: d.rate,
           valid_from: d.validFrom || d.valid_from,
           valid_to: d.validTo || d.valid_to
         }));
+        (dbService as any)._cachedCommissionConfigs = mapped;
+        return mapped;
       }
     } catch(e) {}
-    return [];
+    return (dbService as any)._cachedCommissionConfigs || [];
   },
   saveCommissionConfig: async (config: any) => {
     try {
@@ -1471,18 +1604,21 @@ export const dbService = {
         areaName: config.area_name,
         commissionType: config.commission_type,
         rate: config.rate,
-        validFrom: config.valid_from
+        validFrom: config.valid_from || new Date().toISOString()
       };
-      await fetch(`http://localhost:8080/api/v1/commission-configs/admin`, { 
+      const res = await fetch(`http://localhost:8080/api/v1/commission-configs/admin`, { 
         method: 'POST', 
         headers: { 
           'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}`, 
           'Content-Type': 'application/json' 
         }, 
         body: JSON.stringify(payload)
-      }); 
-    } catch(e){}
-    return [];
+      });
+      (dbService as any)._cachedCommissionConfigs = null;
+      return res.ok;
+    } catch(e){
+      return false;
+    }
   },
   updateCommissionConfig: async (id: number, config: any) => {
     try {
@@ -1495,27 +1631,33 @@ export const dbService = {
         rate: config.rate,
         validFrom: config.valid_from
       };
-      await fetch(`http://localhost:8080/api/v1/commission-configs/admin/${id}`, { 
+      const res = await fetch(`http://localhost:8080/api/v1/commission-configs/admin/${id}`, { 
         method: 'PUT', 
         headers: { 
           'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}`, 
           'Content-Type': 'application/json' 
         }, 
         body: JSON.stringify(payload)
-      }); 
-    } catch(e){}
-    return [];
+      });
+      (dbService as any)._cachedCommissionConfigs = null;
+      return res.ok;
+    } catch(e){
+      return false;
+    }
   },
   deleteCommissionConfig: async (id: number) => {
     try {
-      await fetch(`http://localhost:8080/api/v1/commission-configs/admin/${id}`, { 
+      const res = await fetch(`http://localhost:8080/api/v1/commission-configs/admin/${id}`, { 
         method: 'DELETE', 
         headers: { 
           'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}`
         }
-      }); 
-    } catch(e){}
-    return [];
+      });
+      (dbService as any)._cachedCommissionConfigs = null;
+      return res.ok;
+    } catch(e){
+      return false;
+    }
   },
 
   getCodRecords: async () => { try { const res = await fetch(`http://localhost:8080/api/v1/remittances/admin/all`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('hyperlocal_access_token') || localStorage.getItem('auth_token')}` }}); if (res.ok) { const json = await res.json(); return Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []); } } catch(e){} return []; },
@@ -1908,13 +2050,17 @@ export const dbService = {
   },
 
   // REVIEWS (M-SHOP-05)
-  getReviews: async (shopId?: number): Promise<Review[]> => {
+  getReviews: async (shopId?: number, forceRefresh?: boolean): Promise<Review[]> => {
+    const targetShopId = shopId || (dbService as any)._cachedMyShop?.id || 1;
+    if (!forceRefresh && (dbService as any)._cachedReviews?.[targetShopId]) {
+      return (dbService as any)._cachedReviews[targetShopId];
+    }
     try {
-      const res = await fetch(`http://${API_HOST}:8080/api/v1/reviews/shop/${shopId || 1}`);
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/reviews/shop/${targetShopId}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          return data.map((d: any) => ({
+          const mapped = data.map((d: any) => ({
             id: d.id,
             order_id: d.orderId,
             order_code: d.orderCode || `ORD-${d.orderId}`,
@@ -1931,12 +2077,15 @@ export const dbService = {
             shop_replied_at: d.shopRepliedAt,
             created_at: d.createdAt
           }));
+          (dbService as any)._cachedReviews = (dbService as any)._cachedReviews || {};
+          (dbService as any)._cachedReviews[targetShopId] = mapped;
+          return mapped;
         }
       }
     } catch (e) {
       console.warn('Backend order-service reviews unreachable, using local storage');
     }
-    return [];
+    return (dbService as any)._cachedReviews?.[targetShopId] || [];
   },
 
   replyReview: async (reviewId: number, shopReply: string) => {
