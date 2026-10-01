@@ -75,6 +75,10 @@ export function ShopLayout() {
       if (myShop) {
         setShop(myShop);
         fetchUnread(myShop.id);
+        // Pre-warm shop caches silently in background for 0ms instant tab switching
+        dbService.getOrders({ shop_id: myShop.id }).catch(() => {});
+        dbService.getCategories(myShop.id).catch(() => {});
+        dbService.getItems(myShop.id).catch(() => {});
       }
     });
   }, [currentUser?.id]);

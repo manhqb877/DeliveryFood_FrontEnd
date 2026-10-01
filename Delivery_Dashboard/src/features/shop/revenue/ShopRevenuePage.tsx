@@ -824,11 +824,11 @@ const TAB_LABELS: Record<Tab, string> = {
 };
 
 export function ShopRevenuePage() {
-  const [shop, setShop] = useState<ShopProfile | null>(null);
+  const [shop, setShop] = useState<ShopProfile | null>(() => (dbService as any).getCachedMyShop?.() || null);
   const [wallet, setWallet] = useState<{ balance: number; status: string } | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<Order[]>(() => (dbService as any).getCachedOrders?.() || []);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !((dbService as any).getCachedOrders?.()?.length));
   const [timeframe, setTimeframe] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [periodFilter, setPeriodFilter] = useState<string>('ALL');
@@ -837,8 +837,10 @@ export function ShopRevenuePage() {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
-  const loadRevenueData = async () => {
-    setLoading(true);
+  const loadRevenueData = async (forceRefresh = false) => {
+    if (orders.length === 0 || forceRefresh) {
+      setLoading(true);
+    }
     try {
       const myShop = await dbService.getMyShop();
       setShop(myShop);
@@ -846,7 +848,7 @@ export function ShopRevenuePage() {
       const ownerId = myShop?.owner_id || 0;
       
       const [shopOrders, shopPromos, shopWallet] = await Promise.all([
-        dbService.getOrders({ shop_id: currentShopId }),
+        dbService.getOrders({ shop_id: currentShopId, forceRefresh }),
         dbService.getPromotions('SHOP'),
         dbService.getShopWallet(ownerId)
       ]);
@@ -1156,7 +1158,7 @@ export function ShopRevenuePage() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={loadRevenueData}
+            onClick={() => loadRevenueData(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-semibold shadow-xs cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${loading ? 'animate-spin' : ''}`} />

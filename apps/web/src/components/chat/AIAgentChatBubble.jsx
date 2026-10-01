@@ -2,18 +2,18 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { getAccessToken } from '@/lib/api';
 import {
   X,
-  Send,
-  ChevronDown,
-  RotateCcw,
+  PaperPlaneRight,
+  CaretDown,
+  ArrowClockwise,
   User,
-  Loader2,
-  Sparkles,
-  UtensilsCrossed,
-} from 'lucide-react';
+  CircleNotch,
+  Sparkle,
+} from "@phosphor-icons/react";
 
 const AI_AGENT_URL = process.env.NEXT_PUBLIC_AI_AGENT_URL || 'http://localhost:8088';
 
@@ -176,9 +176,8 @@ function AIAvatar({ size = 'sm' }) {
   const s = size === 'lg' ? 'w-10 h-10' : 'w-7 h-7';
   return (
     <div className={`${s} rounded-full flex-shrink-0 flex items-center justify-center
-      bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-600
-      ring-2 ring-purple-400/40 shadow-lg shadow-purple-900/40`}>
-      <UtensilsCrossed size={size === 'lg' ? 18 : 13} className="text-white" />
+      bg-[#FFB700] text-black shadow-md border border-amber-300`}>
+      <Sparkle size={size === 'lg' ? 18 : 13} weight="fill" className="text-black" />
     </div>
   );
 }
@@ -186,6 +185,8 @@ function AIAvatar({ size = 'sm' }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function AIAgentChatBubble() {
   const { user } = useAuth();
+  const pathname = usePathname();
+  const isHome = pathname === '/';
   const [mounted, setMounted] = useState(false);
   const [sessionId, setSessionId] = useState('');
   const [messages, setMessages] = useState([WELCOME_MSG]);
@@ -209,6 +210,10 @@ export default function AIAgentChatBubble() {
     if (history && history.length > 0) {
       setMessages(history);
     }
+
+    const handleOpenAi = () => setIsOpen(true);
+    window.addEventListener('open-ai-chat', handleOpenAi);
+    return () => window.removeEventListener('open-ai-chat', handleOpenAi);
   }, []);
 
   // ─── Lưu lịch sử vào localStorage mỗi khi messages thay đổi ─────────────
@@ -257,7 +262,10 @@ export default function AIAgentChatBubble() {
         const user_type = user ? 'customer' : 'guest';
         const jwt = getAccessToken() || user?.token || null;
 
-        const headers = { 'Content-Type': 'application/json' };
+        const headers = {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        };
         if (jwt) headers['Authorization'] = `Bearer ${jwt}`;
 
         let res;
@@ -333,31 +341,31 @@ export default function AIAgentChatBubble() {
 
   return (
     <>
-      {/* ── Floating trigger button ── */}
-      <button
-        id="ai-agent-trigger-btn"
-        onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl
-          text-white font-semibold text-sm transition-all duration-300
-          ${isOpen ? 'opacity-0 pointer-events-none scale-75' : 'opacity-100 scale-100'}
-          bg-gradient-to-r from-violet-600 to-indigo-600
-          hover:from-violet-500 hover:to-indigo-500
-          hover:shadow-violet-500/50 hover:-translate-y-1`}
-        style={{ boxShadow: isOpen ? 'none' : '0 8px 32px rgba(139,92,246,0.45)' }}
-        aria-label="Mở chatbot AI đặt món"
-      >
-        <div className="relative">
-          <UtensilsCrossed size={20} />
-          {unread > 0 && (
-            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs
-              rounded-full w-5 h-5 flex items-center justify-center font-bold animate-bounce">
-              {unread}
-            </span>
-          )}
-        </div>
-        <span className="hidden sm:inline">AI Đặt Món</span>
-        <Sparkles size={13} className="opacity-75" />
-      </button>
+      {/* ── Floating trigger button (hidden on home page to keep clean) ── */}
+      {!isHome && (
+        <button
+          id="ai-agent-trigger-btn"
+          data-ai-bubble-toggle="true"
+          onClick={() => setIsOpen(true)}
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full shadow-xl
+            text-black font-extrabold text-sm transition-all duration-300 cursor-pointer
+            ${isOpen ? 'opacity-0 pointer-events-none scale-75' : 'opacity-100 scale-100'}
+            bg-[#FFB700] hover:bg-[#f5aa00] hover:shadow-2xl hover:-translate-y-0.5 border border-amber-300/60`}
+          style={{ boxShadow: isOpen ? 'none' : '0 8px 24px rgba(255,183,0,0.4)' }}
+          aria-label="Trợ lý beFood"
+        >
+          <div className="relative flex items-center">
+            <Sparkle size={18} weight="fill" className="text-black" />
+            {unread > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px]
+                rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                {unread}
+              </span>
+            )}
+          </div>
+          <span className="hidden sm:inline font-bold">Trợ lý beFood</span>
+        </button>
+      )}
 
       {/* ── Chat window ── */}
       <div
@@ -393,10 +401,10 @@ export default function AIAgentChatBubble() {
           <div className="relative z-10 flex items-center gap-3 flex-1">
             <AIAvatar size="lg" />
             <div>
-              <p className="font-bold text-sm text-white leading-tight">FoodieAI ✨</p>
+              <p className="font-bold text-sm text-white leading-tight">Trợ lý beFood</p>
               <p className="text-[11px] text-violet-200 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Trợ lý đặt món thông minh
+                Tư vấn món & gợi ý quán gần
               </p>
             </div>
           </div>
@@ -408,7 +416,7 @@ export default function AIAgentChatBubble() {
               title="Cuộc hội thoại mới"
               className="p-1.5 rounded-lg hover:bg-white/15 text-white/80 hover:text-white transition-colors"
             >
-              <RotateCcw size={14} />
+              <ArrowClockwise size={15} weight="bold" />
             </button>
             <button
               id="ai-agent-close-btn"
@@ -508,7 +516,7 @@ export default function AIAgentChatBubble() {
               hover:opacity-90 transition-opacity z-10"
             style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
           >
-            <ChevronDown size={16} />
+            <CaretDown size={16} weight="bold" />
           </button>
         )}
 
@@ -578,8 +586,8 @@ export default function AIAgentChatBubble() {
             }}
           >
             {loading
-              ? <Loader2 size={17} className="text-white animate-spin" />
-              : <Send size={17} className={input.trim() ? 'text-white' : 'text-violet-400'} />
+              ? <CircleNotch size={17} weight="bold" className="text-white animate-spin" />
+              : <PaperPlaneRight size={17} weight="fill" className={input.trim() ? 'text-white' : 'text-violet-400'} />
             }
           </button>
         </div>

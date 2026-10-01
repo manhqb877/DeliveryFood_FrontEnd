@@ -15,9 +15,11 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
+import { useLanguage } from '@/context/LanguageContext';
 import NotificationBell from '@/components/common/NotificationBell';
 
 export default function OrderHeader() {
+  const { language, setLanguage, t } = useLanguage();
   const [isScrolled, setIsScrolled] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef(null);
@@ -34,6 +36,7 @@ export default function OrderHeader() {
   const [showSearch, setShowSearch] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
   const searchRef = useRef(null);
+  const searchCacheRef = useRef(new Map());
 
   useEffect(() => {
     setIsMounted(true);
@@ -64,9 +67,15 @@ export default function OrderHeader() {
     return () => document.removeEventListener('mousedown', handleClickOutsideSearch);
   }, []);
 
-  // Handle search
+  // Handle search (optimized: fast 60ms debounce, 1-char trigger, client cache & auto-fallback)
   useEffect(() => {
-    if (searchQuery.trim().length >= 2) {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length >= 1) {
+      if (searchCacheRef.current.has(trimmed)) {
+        setSearchResults(searchCacheRef.current.get(trimmed));
+        setIsSearching(false);
+        return;
+      }
       setIsSearching(true);
     } else {
       setSearchResults([]);
@@ -74,17 +83,36 @@ export default function OrderHeader() {
       return;
     }
 
-    const timer = setTimeout(() => {
-      fetch(`http://localhost:8080/api/v1/core/items/search?keyword=${encodeURIComponent(searchQuery)}`)
-        .then(res => res.json())
-        .then(data => {
-          setSearchResults(Array.isArray(data) ? data : (data.data || []));
-        })
-        .catch(console.error)
-        .finally(() => setIsSearching(false));
-    }, 200); // 200ms debounce for faster loading
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+      try {
+        let res = await fetch(`${API_BASE}/core/items/search?keyword=${encodeURIComponent(trimmed)}`, {
+          signal: controller.signal,
+          headers: { "ngrok-skip-browser-warning": "true" }
+        });
+        if (!res.ok && API_BASE.includes("ngrok")) {
+          res = await fetch(`http://localhost:8080/api/v1/core/items/search?keyword=${encodeURIComponent(trimmed)}`, {
+            signal: controller.signal
+          });
+        }
+        if (res.ok) {
+          const data = await res.json();
+          const results = Array.isArray(data) ? data : (data.data || []);
+          searchCacheRef.current.set(trimmed, results);
+          setSearchResults(results);
+        }
+      } catch (err) {
+        if (err.name !== "AbortError") console.error("Search error:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 60);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [searchQuery]);
 
   const handleLogout = async () => {
@@ -149,7 +177,7 @@ export default function OrderHeader() {
                 setShowSearch(true);
               }}
               onFocus={() => setShowSearch(true)}
-              placeholder="Tìm kiếm theo sản phẩm..."
+              placeholder={t('header_search_placeholder', 'Tìm kiếm theo sản phẩm...')}
               className="w-full bg-[#f3f4f6] rounded-[20px] pl-6 pr-12 py-2 text-[13px] text-gray-700 outline-none focus:ring-1 focus:ring-[var(--color-primary)] transition-all border border-gray-200"
             />
             <button className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center bg-[var(--color-primary)]/20 rounded-full text-[var(--color-primary-dark)] shadow-sm hover:bg-[var(--color-primary)] hover:text-black transition-colors z-10">
@@ -157,7 +185,7 @@ export default function OrderHeader() {
             </button>
 
             {/* Search Dropdown */}
-            {showSearch && searchQuery.trim().length >= 2 && (
+            {showSearch && searchQuery.trim().length >= 1 && (
               <div className="absolute top-[calc(100%+12px)] left-0 w-[550px] bg-white rounded-lg shadow-[0_4px_15px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden z-[100] transform -translate-x-4">
                 {isSearching ? (
                   <div className="p-4 text-center text-sm text-gray-500">Đang tìm kiếm...</div>
@@ -261,7 +289,13 @@ export default function OrderHeader() {
           <div className="hidden md:flex items-center gap-2">
             <button
               type="button"
-              className="transition-all hover:scale-110 ring-2 ring-gray-200 opacity-100 rounded-[2px]"
+              onClick={() => setLanguage('vi')}
+              title="Tiếng Việt"
+              className={`transition-all hover:scale-110 rounded-[2px] p-0.5 cursor-pointer ${
+                language === 'vi'
+                  ? 'ring-2 ring-yellow-400 opacity-100 shadow-xs'
+                  : 'opacity-40 hover:opacity-100'
+              }`}
             >
               <img
                 src="https://flagcdn.com/w40/vn.png"
@@ -271,7 +305,13 @@ export default function OrderHeader() {
             </button>
             <button
               type="button"
-              className="transition-all hover:scale-110 opacity-40 hover:opacity-100"
+              onClick={() => setLanguage('en')}
+              title="English"
+              className={`transition-all hover:scale-110 rounded-[2px] p-0.5 cursor-pointer ${
+                language === 'en'
+                  ? 'ring-2 ring-yellow-400 opacity-100 shadow-xs'
+                  : 'opacity-40 hover:opacity-100'
+              }`}
             >
               <img
                 src="https://flagcdn.com/w40/gb.png"
@@ -288,7 +328,7 @@ export default function OrderHeader() {
             </div>
             <div className="flex flex-col text-right">
               <span className="text-[10px] font-bold text-gray-500 uppercase leading-none">
-                Giao tận nơi
+                {t('header_delivery', 'Giao tận nơi')}
               </span>
               <span className="text-[14px] font-black text-gray-800 leading-tight">1900 1755</span>
             </div>
@@ -346,7 +386,7 @@ export default function OrderHeader() {
                     className="flex items-center gap-2 px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     <UserCircleIcon className="w-4 h-4" />
-                    Tài khoản của tôi
+                    {t('header_profile', 'Tài khoản của tôi')}
                   </Link>
                   <div className="border-t border-gray-100 mt-1 pt-1">
                     <button
@@ -355,7 +395,7 @@ export default function OrderHeader() {
                       className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-yellow-600 hover:bg-yellow-50 transition-colors cursor-pointer"
                     >
                       <ArrowRightStartOnRectangleIcon className="w-4 h-4" />
-                      Đăng xuất
+                      {t('header_logout', 'Đăng xuất')}
                     </button>
                   </div>
                 </div>
@@ -370,8 +410,8 @@ export default function OrderHeader() {
                 <UserCircleIcon className="w-5 h-5" />
               </div>
               <div className="hidden lg:flex flex-col text-left">
-                <span className="text-[11px] text-gray-700 font-bold leading-tight">Tài khoản</span>
-                <span className="text-[11px] font-normal text-gray-500 leading-tight">Đăng nhập</span>
+                <span className="text-[11px] text-gray-700 font-bold leading-tight">{t('header_account', 'Tài khoản')}</span>
+                <span className="text-[11px] font-normal text-gray-500 leading-tight">{t('header_login', 'Đăng nhập')}</span>
               </div>
             </Link>
           )}
@@ -382,7 +422,7 @@ export default function OrderHeader() {
             className="hidden sm:flex items-center gap-1.5 px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[#1a1a1a] rounded-full font-bold text-[13px] transition-all h-[36px] cursor-pointer shadow-sm group"
           >
             <TruckIcon className="w-4 h-4" />
-            <span>Tra cứu đơn</span>
+            <span>{t('header_track_order', 'Tra cứu đơn')}</span>
           </Link>
 
           {/* Cart Icon */}
@@ -391,7 +431,7 @@ export default function OrderHeader() {
             className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[#1a1a1a] rounded-full transition-colors h-[36px] cursor-pointer shadow-sm group"
           >
             <ShoppingCartIcon className="w-4 h-4 text-[#1a1a1a]" />
-            <span className="text-[13px] font-bold text-[#1a1a1a] hidden sm:inline">Giỏ hàng</span>
+            <span className="text-[13px] font-bold text-[#1a1a1a] hidden sm:inline">{t('header_cart', 'Giỏ hàng')}</span>
             <span className="bg-white/80 group-hover:bg-white text-black text-[12px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center transition-colors">
               {totalItemCount}
             </span>
@@ -410,15 +450,15 @@ export default function OrderHeader() {
               <span className="w-full h-[2px] bg-black block"></span>
               <span className="w-full h-[2px] bg-black block"></span>
             </div>
-            <span className="text-[14px] font-bold text-black capitalize">Danh mục sản phẩm</span>
+            <span className="text-[14px] font-bold text-black capitalize">{t('nav_categories', 'Danh mục sản phẩm')}</span>
           </div>
 
           <Link href="/policy" className="flex items-center text-black hover:opacity-80 transition-opacity">
-            <span className="text-[13px] font-bold">Chính sách đặt hàng</span>
+            <span className="text-[13px] font-bold">{t('nav_policy', 'Chính sách đặt hàng')}</span>
           </Link>
 
           <Link href="/contact" className="flex items-center text-black hover:opacity-80 transition-opacity">
-            <span className="text-[13px] font-bold">Liên hệ</span>
+            <span className="text-[13px] font-bold">{t('nav_contact', 'Liên hệ')}</span>
           </Link>
         </div>
       </div>

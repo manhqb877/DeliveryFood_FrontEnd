@@ -71,21 +71,74 @@ export function LoginPage() {
 
   // Load Districts when Province changes
   useEffect(() => {
-    if (selectedProv) fetchDistricts(selectedProv).then(setDistricts).catch(() => {});
-    else {
+    if (selectedProv) {
+      fetchDistricts(selectedProv).then(setDistricts).catch(() => {});
+    } else {
       setDistricts([]);
       setSelectedDist('');
+      setWards([]);
+      setSelectedWard('');
     }
   }, [selectedProv]);
 
   // Load Wards when District changes
   useEffect(() => {
-    if (selectedDist) fetchWards(selectedDist).then(setWards).catch(() => {});
-    else {
+    if (selectedDist) {
+      fetchWards(selectedDist).then(setWards).catch(() => {});
+    } else {
       setWards([]);
       setSelectedWard('');
     }
   }, [selectedDist]);
+
+  const norm = (s: string) =>
+    (s || "")
+      .toLowerCase()
+      .replace(/^(tỉnh|thành phố|tp\.|quận|huyện|thị xã|tx\.|phường|xã|thị trấn|tt\.)\s+/g, "")
+      .trim();
+
+  const parseAddressString = (str: string) => {
+    if (!str) return null;
+    const parts = str.split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      const city = parts[parts.length - 1];
+      const dist = parts[parts.length - 2];
+      const ward = parts[parts.length - 3];
+      return { city, dist, ward };
+    }
+    return null;
+  };
+
+  const mapLocationToDropdowns = (cityName?: string, districtName?: string, wardName?: string) => {
+    if (!cityName) return;
+    const cityNorm = norm(cityName);
+    const p = provinces.find(
+      (x) => norm(x.name) === cityNorm || norm(x.name).includes(cityNorm) || cityNorm.includes(norm(x.name))
+    );
+    if (!p) return;
+
+    setSelectedProv(p.code);
+    fetchDistricts(p.code).then((dList) => {
+      setDistricts(dList);
+      if (!districtName) return;
+      const distNorm = norm(districtName);
+      const d = dList.find(
+        (x: any) => norm(x.name) === distNorm || norm(x.name).includes(distNorm) || distNorm.includes(norm(x.name))
+      );
+      if (!d) return;
+
+      setSelectedDist(d.code);
+      fetchWards(d.code).then((wList) => {
+        setWards(wList);
+        if (!wardName) return;
+        const wardNorm = norm(wardName);
+        const w = wList.find(
+          (x: any) => norm(x.name) === wardNorm || norm(x.name).includes(wardNorm) || wardNorm.includes(norm(x.name))
+        );
+        if (w) setSelectedWard(w.code);
+      });
+    });
+  };
 
   // Autocomplete Address with Vietmap
   useEffect(() => {
@@ -489,7 +542,15 @@ export function LoginPage() {
                 onFocus={() => {
                   if (streetAddress.length >= 3) setShowAutocomplete(true);
                 }}
-                onBlur={() => setTimeout(() => setShowAutocomplete(false), 250)}
+                onBlur={() => {
+                  setTimeout(() => {
+                    setShowAutocomplete(false);
+                    if (!selectedProv && streetAddress.trim()) {
+                      const parsed = parseAddressString(streetAddress);
+                      if (parsed) mapLocationToDropdowns(parsed.city, parsed.dist, parsed.ward);
+                    }
+                  }, 250);
+                }}
               />
               <span className="underline-anim"></span>
 
@@ -511,6 +572,10 @@ export function LoginPage() {
                           setStreetAddress(displayStr);
                           setShowAutocomplete(false);
 
+                          let boundaryCity = res.boundaries?.find((b: any) => b.type === 0)?.full_name || res.boundaries?.find((b: any) => b.type === 0)?.name;
+                          let boundaryDist = res.boundaries?.find((b: any) => b.type === 1)?.full_name || res.boundaries?.find((b: any) => b.type === 1)?.name;
+                          let boundaryWard = res.boundaries?.find((b: any) => b.type === 2)?.full_name || res.boundaries?.find((b: any) => b.type === 2)?.name;
+
                           fetch(
                             `https://maps.vietmap.vn/api/place/v3?apikey=809bdd000025b62b0e9710b82e28f65f6178ee698cdb1845&refid=${res.ref_id}`
                           )
@@ -520,34 +585,29 @@ export function LoginPage() {
                                 setShopLat(detail.lat);
                                 setShopLng(detail.lng);
                               }
-                              if (detail?.city) {
-                                const p = provinces.find(
-                                  (x) => x.name.includes(detail.city) || detail.city.includes(x.name)
-                                );
-                                if (p) {
-                                  setSelectedProv(p.code);
-                                  fetchDistricts(p.code).then((dList) => {
-                                    setDistricts(dList);
-                                    const d = dList.find(
-                                      (x: any) =>
-                                        x.name.includes(detail.district) || detail.district.includes(x.name)
-                                    );
-                                    if (d) {
-                                      setSelectedDist(d.code);
-                                      fetchWards(d.code).then((wList) => {
-                                        setWards(wList);
-                                        const w = wList.find(
-                                          (x: any) =>
-                                            x.name.includes(detail.ward) || detail.ward.includes(x.name)
-                                        );
-                                        if (w) setSelectedWard(w.code);
-                                      });
-                                    }
-                                  });
-                                }
+                              const city = detail?.city || boundaryCity;
+                              const dist = detail?.district || boundaryDist;
+                              const ward = detail?.ward || boundaryWard;
+
+                              if (city) {
+                                mapLocationToDropdowns(city, dist, ward);
+                              } else {
+                                const parsed = parseAddressString(displayStr);
+                                if (parsed) mapLocationToDropdowns(parsed.city, parsed.dist, parsed.ward);
                               }
                             })
-                            .catch(console.error);
+                            .catch((err) => {
+                              console.error(err);
+                              const city = boundaryCity;
+                              const dist = boundaryDist;
+                              const ward = boundaryWard;
+                              if (city) {
+                                mapLocationToDropdowns(city, dist, ward);
+                              } else {
+                                const parsed = parseAddressString(displayStr);
+                                if (parsed) mapLocationToDropdowns(parsed.city, parsed.dist, parsed.ward);
+                              }
+                            });
                         }}
                       >
                         <p style={{ fontWeight: 600, fontSize: '11px', color: '#334155', margin: 0 }}>

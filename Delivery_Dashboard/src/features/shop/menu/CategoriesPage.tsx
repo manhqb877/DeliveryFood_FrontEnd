@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '@/api/client';
-import { Category } from '@/api/mockData';
+import { Category, Item } from '@/api/mockData';
 import { CardGridItem } from '@/components/ui/Card';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Modal } from '@/components/ui/Modal';
@@ -8,8 +8,9 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Plus, Edit2, Trash2, Layers } from 'lucide-react';
 
 export function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState<Category[]>(() => (dbService as any).getCachedCategories?.() || []);
+  const [items, setItems] = useState<Item[]>(() => (dbService as any).getCachedItems?.() || []);
+  const [loading, setLoading] = useState(() => !((dbService as any).getCachedCategories?.()?.length));
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
 
@@ -34,13 +35,22 @@ export function CategoriesPage() {
     available_until: '22:00',
   });
 
-  const loadData = async () => {
-    setLoading(true);
-    const myShop = await dbService.getMyShop();
-    const currentShopId = myShop?.id || 1;
-    const data = await dbService.getCategories(currentShopId);
-    setCategories(data);
-    setLoading(false);
+  const loadData = async (showLoading = false) => {
+    if (showLoading || categories.length === 0) setLoading(true);
+    try {
+      const myShop = await dbService.getMyShop();
+      const currentShopId = myShop?.id || 1;
+      const [catData, itemData] = await Promise.all([
+        dbService.getCategories(currentShopId),
+        dbService.getItems(currentShopId),
+      ]);
+      setCategories(catData || []);
+      setItems(itemData || []);
+    } catch (e) {
+      console.error('Error loading data:', e);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -86,22 +96,57 @@ export function CategoriesPage() {
   };
 
   const handleSave = async () => {
-    if (!editingCategory.name) {
+    if (!editingCategory.name?.trim()) {
       alert('Vui lòng nhập tên danh mục!');
       return;
     }
-    const myShop = await dbService.getMyShop();
-    const currentShopId = myShop?.id || 1;
-    await dbService.saveCategory({ ...editingCategory, shop_id: currentShopId });
-    alert('Đã lưu danh mục thành công!');
-    setIsModalOpen(false);
-    loadData();
+    try {
+      const myShop = await dbService.getMyShop();
+      const currentShopId = myShop?.id || 1;
+      setIsModalOpen(false);
+      const res = await dbService.saveCategory({ ...editingCategory, shop_id: currentShopId });
+      if (res) {
+        await loadData(false);
+      } else {
+        alert('Không thể lưu danh mục. Vui lòng thử lại!');
+        await loadData(false);
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert(`Lỗi khi lưu danh mục: ${e?.message || 'Vui lòng kiểm tra lại thông tin.'}`);
+      await loadData(false);
+    }
   };
 
-  const handleDelete = async (id: number) => {
-    if (confirm('Bạn có chắc chắn muốn xóa danh mục này?')) {
-      await dbService.deleteCategory(id);
-      loadData();
+  const handleDelete = async (cat: Category) => {
+    const categoryItems = items.filter(
+      (it) => it.category_id === cat.id || (it as any).categoryId === cat.id
+    );
+    const count = categoryItems.length;
+
+    let confirmMsg = `Bạn có chắc chắn muốn xóa danh mục "${cat.name}"?`;
+    if (count > 0) {
+      confirmMsg = `⚠️ Danh mục "${cat.name}" này đang có ${count} món ăn!\nBạn có chắc chắn muốn xoá danh mục này không?`;
+    }
+
+    if (window.confirm(confirmMsg)) {
+      // Optimistic delete: instantly remove from UI
+      const prevCats = [...categories];
+      setCategories(prev => prev.filter(c => c.id !== cat.id));
+
+      try {
+        const ok = await dbService.deleteCategory(cat.id);
+        if (ok) {
+          loadData(false);
+        } else {
+          setCategories(prevCats);
+          alert('Không thể xóa danh mục. Vui lòng thử lại!');
+        }
+      } catch (e: any) {
+        console.error(e);
+        setCategories(prevCats);
+        alert(`Lỗi khi xóa danh mục: ${e?.message || 'Vui lòng thử lại sau.'}`);
+      }
     }
   };
 
@@ -148,45 +193,50 @@ export function CategoriesPage() {
       ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-            {paginatedCategories.map((cat) => (
-              <div key={cat.id} className="h-full">
-                <CardGridItem
-                  className="h-full"
-                  image={cat.image_url}
-                  categoryOverlay={`Thứ tự: #${cat.sort_order}`}
-                  statusText={cat.is_active ? 'ACTIVE' : 'INACTIVE'}
-                  subBadge={cat.available_from && cat.available_until ? `⏰ Khung giờ: ${cat.available_from} - ${cat.available_until}` : '⏰ Cả ngày'}
-                  title={`${cat.icon_emoji || '📁'} ${cat.name}`}
-                  subtitle={cat.description}
-                  actions={[
-                    {
-                      icon: <Layers className="w-4 h-4 text-purple-600" />,
-                      title: 'Xem chi tiết Topping',
-                      onClick: async () => {
-                        setOptionsCategory(cat);
-                        const opts = await (dbService as any).getSuggestedOptionsByCategory?.(cat.id) || [];
-                        setCategoryOptions(opts);
-                        setIsOptionsModalOpen(true);
+            {paginatedCategories.map((cat) => {
+              const catItemCount = items.filter(
+                (it) => it.category_id === cat.id || (it as any).categoryId === cat.id
+              ).length;
+              return (
+                <div key={cat.id} className="h-full">
+                  <CardGridItem
+                    className="h-full"
+                    image={cat.image_url}
+                    categoryOverlay={`Thứ tự: #${cat.sort_order} • ${catItemCount} món`}
+                    statusText={cat.is_active ? 'ACTIVE' : 'INACTIVE'}
+                    subBadge={cat.available_from && cat.available_until ? `⏰ Khung giờ: ${cat.available_from} - ${cat.available_until}` : '⏰ Cả ngày'}
+                    title={`${cat.icon_emoji || '📁'} ${cat.name}`}
+                    subtitle={cat.description || (catItemCount > 0 ? `Đang có ${catItemCount} món ăn trong danh mục` : 'Chưa có món ăn')}
+                    actions={[
+                      {
+                        icon: <Layers className="w-4 h-4 text-purple-600" />,
+                        title: 'Xem chi tiết Topping',
+                        onClick: async () => {
+                          setOptionsCategory(cat);
+                          const opts = await (dbService as any).getSuggestedOptionsByCategory?.(cat.id) || [];
+                          setCategoryOptions(opts);
+                          setIsOptionsModalOpen(true);
+                        },
                       },
-                    },
-                    {
-                      icon: <Edit2 className="w-4 h-4 text-slate-600" />,
-                      title: 'Chỉnh sửa',
-                      onClick: () => {
-                        setEditingCategory(cat);
-                        setIsModalOpen(true);
+                      {
+                        icon: <Edit2 className="w-4 h-4 text-slate-600" />,
+                        title: 'Chỉnh sửa',
+                        onClick: () => {
+                          setEditingCategory(cat);
+                          setIsModalOpen(true);
+                        },
                       },
-                    },
-                    {
-                      icon: <Trash2 className="w-4 h-4 text-rose-600" />,
-                      title: 'Xóa',
-                      onClick: () => handleDelete(cat.id),
-                      danger: true,
-                    },
-                  ]}
-                />
-              </div>
-            ))}
+                      {
+                        icon: <Trash2 className="w-4 h-4 text-rose-600" />,
+                        title: 'Xóa',
+                        onClick: () => handleDelete(cat),
+                        danger: true,
+                      },
+                    ]}
+                  />
+                </div>
+              );
+            })}
           </div>
           
           <Pagination

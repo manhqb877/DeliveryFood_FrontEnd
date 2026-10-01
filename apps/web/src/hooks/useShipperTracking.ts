@@ -23,13 +23,17 @@ export function useShipperTracking(shipperId: number | null | undefined) {
     
     const fetchInitialLocation = async () => {
       try {
-        const res = await fetch(`http://localhost:8084/tracking/shippers/${shipperId}/location`);
-        if (res.ok) {
+        // Primary: fetch via API Gateway (Port 8080) which has full CORS support
+        let res = await fetch(`http://localhost:8080/api/v1/tracking/shippers/${shipperId}/location`);
+        if (!res.ok && res.status !== 404) {
+          res = await fetch(`http://localhost:8084/tracking/shippers/${shipperId}/location`).catch(() => null as any);
+        }
+        if (res && res.ok) {
           const data = await res.json();
           setLocation(data);
         }
       } catch (e) {
-        console.warn('Could not fetch initial shipper location:', e);
+        // Shipper may be offline or hasn't pushed GPS yet
       }
     };
     

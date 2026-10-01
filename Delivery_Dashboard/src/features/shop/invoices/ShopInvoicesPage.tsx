@@ -27,9 +27,17 @@ import {
 } from 'lucide-react';
 
 export function ShopInvoicesPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [shop, setShop] = useState<ShopProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [shop, setShop] = useState<ShopProfile | null>(() => (dbService as any).getCachedMyShop?.() || null);
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const cached = (dbService as any).getCachedOrders?.();
+    if (cached && Array.isArray(cached)) {
+      return [...cached].sort(
+        (a, b) => new Date(b.placed_at).getTime() - new Date(a.placed_at).getTime()
+      );
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState(() => !((dbService as any).getCachedOrders?.()?.length));
 
   // Filters
   const [search, setSearch] = useState('');
@@ -44,13 +52,15 @@ export function ShopInvoicesPage() {
   // Invoice Detail Modal
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (forceRefresh = false) => {
+    if (orders.length === 0 || forceRefresh) {
+      setLoading(true);
+    }
     try {
       const myShop = await dbService.getMyShop();
       if (myShop) {
         setShop(myShop);
-        const data = await dbService.getOrders({ shop_id: myShop.id });
+        const data = await dbService.getOrders({ shop_id: myShop.id, forceRefresh });
         // Sắp xếp đơn mới nhất lên đầu
         const sorted = [...data].sort(
           (a, b) => new Date(b.placed_at).getTime() - new Date(a.placed_at).getTime()
@@ -140,7 +150,7 @@ export function ShopInvoicesPage() {
         </div>
 
         <button
-          onClick={loadData}
+          onClick={() => loadData(true)}
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-semibold shadow-2xs cursor-pointer transition-colors"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-600' : 'text-slate-500'}`} />
@@ -212,7 +222,7 @@ export function ShopInvoicesPage() {
         searchQuery={search}
         onSearchChange={setSearch}
         searchPlaceholder="Tìm kiếm theo mã HĐ, mã đơn, tên khách, số điện thoại..."
-        onRefresh={loadData}
+        onRefresh={() => loadData(true)}
         dropdowns={[
           {
             id: 'paymentMethod',

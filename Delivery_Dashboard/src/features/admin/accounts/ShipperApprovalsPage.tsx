@@ -20,7 +20,7 @@ export function ShipperApprovalsPage() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const data = await dbService.getShippers();
+      const data = await dbService.getShippers(true);
       setShippers(data);
     } catch (e: any) {
       console.error(e);
@@ -37,9 +37,16 @@ export function ShipperApprovalsPage() {
   const handleApprove = async (s: ShipperProfile, approved: boolean) => {
     const actionName = approved ? 'DUYỆT' : 'TỪ CHỐI';
     if (confirm(`Bạn có chắc chắn muốn ${actionName} cho tài xế "${s.full_name}"?`)) {
-      await dbService.approveShipper(s.id, approved);
-      alert(`Đã ${actionName.toLowerCase()} tài xế thành công!`);
-      loadData();
+      try {
+        setLoading(true);
+        await dbService.approveShipper(s.id, approved);
+        alert(`Đã ${actionName.toLowerCase()} tài xế thành công!`);
+        await loadData();
+      } catch (err: any) {
+        alert(`${actionName} thất bại: ` + (err.message || 'Không thể kết nối đến máy chủ'));
+      } finally {
+        setLoading(false);
+      }
     }
   };
 

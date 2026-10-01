@@ -5,27 +5,26 @@ import { User, Phone, Star, Bike, CreditCard, CheckCircle2, AlertCircle } from '
 import { Badge } from '@/components/ui/Badge';
 
 export function ShopShippersPage() {
-  const [shippers, setShippers] = useState<ShipperProfile[]>([]);
-  const [selectedShipper, setSelectedShipper] = useState<ShipperProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialShippers = (dbService as any).getCachedShippers?.() || [];
+  const [shippers, setShippers] = useState<ShipperProfile[]>(() => initialShippers);
+  const [selectedShipper, setSelectedShipper] = useState<ShipperProfile | null>(() => initialShippers[0] || null);
+  const [loading, setLoading] = useState(() => initialShippers.length === 0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [shopId, setShopId] = useState<number>(1);
+  const [shopId, setShopId] = useState<number>(() => (dbService as any).getCachedMyShop?.()?.id || 1);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (forceRefresh = false) => {
     try {
       const myShop = await dbService.getMyShop();
       if (myShop) setShopId(myShop.id);
 
       // Lấy tất cả shipper trong hệ thống (hoặc thuộc khu vực của quán)
-      const allShippers = await dbService.getShippers();
+      const allShippers = await dbService.getShippers(forceRefresh);
       setShippers(allShippers);
-      if (allShippers.length > 0) {
-        setSelectedShipper(allShippers[0]);
-      }
+      setSelectedShipper(prev => prev || allShippers[0] || null);
       setLoading(false);
     } catch (e: any) {
       console.error('Failed to fetch data', e);
