@@ -123,6 +123,18 @@ export function getValidToken(): string | null {
         localStorage.removeItem('auth_token');
         return null;
       }
+      const currentUserRaw = localStorage.getItem('hyperlocal_current_user');
+      if (currentUserRaw) {
+        try {
+          const currentUser = JSON.parse(currentUserRaw);
+          if (currentUser?.id && payload.userId && Number(payload.userId) !== Number(currentUser.id)) {
+            console.warn('JWT token belongs to user', payload.userId, 'but current user is', currentUser.id, '- clearing token');
+            localStorage.removeItem('hyperlocal_access_token');
+            localStorage.removeItem('auth_token');
+            return null;
+          }
+        } catch (e) {}
+      }
     }
   } catch (e) {
     console.warn('Invalid token format, clearing from localStorage:', e);
@@ -415,102 +427,141 @@ export const dbService = {
     return (dbService as any)._cachedReviews?.[sid] || null;
   },
 
-  getMyShop: async (): Promise<ShopProfile | null> => {
-    if ((dbService as any)._cachedMyShop) {
-      return (dbService as any)._cachedMyShop;
+  getMyShop: async (forceRefresh = false): Promise<ShopProfile | null> => {
+    const currentUserRaw = localStorage.getItem('hyperlocal_current_user');
+    const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
+
+    // Check memory cache: MUST match the current user
+    if (!forceRefresh && (dbService as any)._cachedMyShop) {
+      const cached = (dbService as any)._cachedMyShop;
+      if (!currentUser?.id || Number(cached.owner_id) === Number(currentUser.id) || Number(cached.id) === Number(currentUser.id)) {
+        return cached;
+      }
+      // Stale cache from another user/shop! Invalidate it.
+      (dbService as any)._cachedMyShop = null;
     }
-    if ((dbService as any)._cachedMyShopPromise) {
+
+    if (!forceRefresh && (dbService as any)._cachedMyShopPromise) {
       return (dbService as any)._cachedMyShopPromise;
     }
 
     const fetchPromise = (async () => {
       const token = getValidToken();
-    const currentUserRaw = localStorage.getItem('hyperlocal_current_user');
-    const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
 
-    // 1. Try /api/v1/auth/shops/me if valid token exists
-    if (token) {
-      try {
-        const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.status === 401) {
-          localStorage.removeItem('hyperlocal_access_token');
-          localStorage.removeItem('auth_token');
-        } else if (res.ok) {
-          const json = await res.json();
-          if (json.data) {
-            return mapBackendShopToProfile(json.data);
-          }
-        }
-      } catch (err) {
-        console.warn('Could not fetch /shops/me from gateway, trying 8081 directly:', err);
+      // 1. Try /api/v1/auth/shops/me if valid token exists
+      if (token) {
         try {
-          const directRes = await fetch(`http://${API_HOST}:8081/api/v1/auth/shops/me`, {
+          const res = await fetch(`http://${API_HOST}:8080/api/v1/auth/shops/me`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
-          if (directRes.status === 401) {
+          if (res.status === 401) {
             localStorage.removeItem('hyperlocal_access_token');
             localStorage.removeItem('auth_token');
-          } else if (directRes.ok) {
-            const directJson = await directRes.json();
-            if (directJson.data) {
-              return mapBackendShopToProfile(directJson.data);
+          } else if (res.ok) {
+            const json = await res.json();
+            if (json.data) {
+              const profile = mapBackendShopToProfile(json.data);
+              if (!currentUser?.id || Number(profile.owner_id) === Number(currentUser.id) || Number(profile.id) === Number(currentUser.id)) {
+                return profile;
+              }
             }
           }
-        } catch (e2) {}
+        } catch (err) {
+          console.warn('Could not fetch /shops/me from gateway, trying 8081 directly:', err);
+          try {
+            const directRes = await fetch(`http://${API_HOST}:8081/api/v1/auth/shops/me`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (directRes.status === 401) {
+              localStorage.removeItem('hyperlocal_access_token');
+              localStorage.removeItem('auth_token');
+            } else if (directRes.ok) {
+              const directJson = await directRes.json();
+              if (directJson.data) {
+                const profile = mapBackendShopToProfile(directJson.data);
+                if (!currentUser?.id || Number(profile.owner_id) === Number(currentUser.id) || Number(profile.id) === Number(currentUser.id)) {
+                  return profile;
+                }
+              }
+            }
+          } catch (e2) {}
+        }
       }
-    }
 
-    // 2. Try fetching from /api/v1/core/shops and match by ownerId or userId
-    if (currentUser?.id) {
+      // 2. Try fetching from /api/v1/core/shops and match by ownerId, id, or phone
       try {
         const res = await fetch(`http://${API_HOST}:8080/api/v1/core/shops`);
         if (res.ok) {
           const shopsList = await res.json();
-          if (Array.isArray(shopsList)) {
-            const found = shopsList.find((s: any) => s.ownerId === currentUser.id || s.id === currentUser.id);
-            if (found) {
-              return mapBackendShopToProfile(found);
+          if (Array.isArray(shopsList) && shopsList.length > 0) {
+            if (currentUser?.id) {
+              const found = shopsList.find((s: any) =>
+                Number(s.ownerId || s.owner_id) === Number(currentUser.id) ||
+                Number(s.id) === Number(currentUser.id) ||
+                (currentUser.phone && s.phone === currentUser.phone)
+              );
+              if (found) {
+                return mapBackendShopToProfile(found);
+              }
             }
           }
         }
       } catch (err) {
         console.warn('Could not fetch /core/shops:', err);
       }
-    }
 
-    // 3. Fallback to first shop in real backend
-    try {
-      const res = await fetch(`http://${API_HOST}:8080/api/v1/core/shops`);
-      if (res.ok) {
-        const shopsList = await res.json();
-        if (Array.isArray(shopsList) && shopsList.length > 0) {
-          return mapBackendShopToProfile(shopsList[0]);
-        }
+      // 3. Fallback to local stored shops matching current user
+      const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
+      if (currentUser?.id) {
+        const localFound = shops.find(s =>
+          Number(s.owner_id) === Number(currentUser.id) ||
+          Number(s.id) === Number(currentUser.id) ||
+          (currentUser.phone && s.phone === currentUser.phone)
+        );
+        if (localFound) return localFound;
       }
-    } catch (err) {
-      console.warn('Fallback to real backend shops failed:', err);
-    }
 
-    const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
-    if (currentUser?.id) {
-      const localFound = shops.find(s => s.owner_id === currentUser.id);
-      if (localFound) return localFound;
-    }
-    const result = shops[0] || null;
-    return result;
-  })().then((shop) => {
-    (dbService as any)._cachedMyShop = shop;
-    (dbService as any)._cachedMyShopPromise = null;
-    return shop;
-  }).catch((err) => {
-    (dbService as any)._cachedMyShopPromise = null;
-    throw err;
-  });
+      // 4. If current user is a SHOP_MANAGER, create placeholder profile with user's info rather than showing a random shop
+      if (currentUser?.role === 'SHOP_MANAGER' && currentUser.full_name) {
+        return {
+          id: currentUser.id,
+          owner_id: currentUser.id,
+          owner_name: currentUser.full_name,
+          shop_name: currentUser.full_name,
+          shop_type: 'COM_TRUA' as const,
+          shop_description: 'Gian hàng ẩm thực',
+          logo_url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300',
+          cover_image_url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800',
+          area_id: currentUser.area_id || 1,
+          area_name: 'Vinhomes Grand Park Q9',
+          location_detail: '',
+          phone: currentUser.phone || '',
+          business_hours: [],
+          approval_status: 'APPROVED' as const,
+          is_open: true,
+          is_accepting_orders: true,
+          avg_rating: 5.0,
+          total_reviews: 0,
+          shop_lat: 10.77,
+          shop_lng: 106.69,
+          documents: [],
+          created_at: new Date().toISOString()
+        };
+      }
 
-  (dbService as any)._cachedMyShopPromise = fetchPromise;
-  return fetchPromise;
+      const result = shops[0] || null;
+      return result;
+    })().then((shop) => {
+      (dbService as any)._cachedMyShop = shop;
+      (dbService as any)._cachedMyShopPromise = null;
+      return shop;
+    }).catch((err) => {
+      (dbService as any)._cachedMyShopPromise = null;
+      throw err;
+    });
+
+    (dbService as any)._cachedMyShopPromise = fetchPromise;
+    return fetchPromise;
   },
   getShops: async (forceRefresh?: boolean): Promise<ShopProfile[]> => {
     if (!forceRefresh && (dbService as any)._cachedShops?.length) {
@@ -1306,6 +1357,8 @@ export const dbService = {
               },
               subtotal: d.subtotal || 0,
               discount_amount: d.discountAmount || 0,
+              promotion_code: d.promotionCode || d.promotion_code || '',
+              promotion_id: d.promotionId || d.promotion_id || null,
               delivery_fee: d.deliveryFee || 0,
               total_amount: d.totalAmount || 0,
               payment_method: d.paymentMethod || 'COD',
@@ -2019,15 +2072,15 @@ export const dbService = {
             return data.map((d: any) => ({
               id: d.id,
               promotion_id: d.promotionId,
-              promotion_code: d.promotionCode,
+              promotion_code: d.promotionCode || d.promoCode || '',
               order_id: d.orderId,
-              order_code: d.orderCode || `ORD-${d.orderId}`,
+              order_code: d.orderCode || (d.orderId ? `ORD-${d.orderId}` : '—'),
               user_id: d.userId,
-              user_name: d.userName || `Khách hàng #${d.userId}`,
-              user_phone: d.userPhone || '090xxxxxxx',
-              order_value: d.orderValue,
-              discount_amount: d.discountAmount,
-              used_at: d.usedAt
+              user_name: d.userName || (d.userId ? `Khách hàng #${d.userId}` : 'Khách vãng lai'),
+              user_phone: d.userPhone || '—',
+              order_value: Number(d.orderValue ?? d.orderAmount ?? 0),
+              discount_amount: Number(d.discountAmount ?? d.discountApplied ?? 0),
+              used_at: d.usedAt || d.createdAt || new Date().toISOString()
             }));
           }
         }
@@ -2035,9 +2088,22 @@ export const dbService = {
     } catch (e) {
       console.warn('Backend core-service redemptions unreachable, using local data');
     }
-    const list = getStored<PromotionRedemption[]>(STORAGE_KEYS.PROMOTION_REDEMPTIONS, initialPromotionRedemptions);
-    if (promotionId) return list.filter(r => r.promotion_id === promotionId);
-    return list;
+    const list = getStored<PromotionRedemption[]>(STORAGE_KEYS.PROMOTION_REDEMPTIONS, initialPromotionRedemptions) || [];
+    const sanitized = list.map((r: any) => ({
+      id: r.id,
+      promotion_id: r.promotion_id,
+      promotion_code: r.promotion_code || '',
+      order_id: r.order_id,
+      order_code: r.order_code || (r.order_id ? `ORD-${r.order_id}` : '—'),
+      user_id: r.user_id,
+      user_name: r.user_name || (r.user_id ? `Khách hàng #${r.user_id}` : 'Khách vãng lai'),
+      user_phone: r.user_phone || '—',
+      order_value: Number(r.order_value ?? 0),
+      discount_amount: Number(r.discount_amount ?? 0),
+      used_at: r.used_at || new Date().toISOString()
+    }));
+    if (promotionId) return sanitized.filter(r => r.promotion_id === promotionId);
+    return sanitized;
   },
 
   // REVENUE & SETTLEMENT & PAYOUT (M-SHOP-04)

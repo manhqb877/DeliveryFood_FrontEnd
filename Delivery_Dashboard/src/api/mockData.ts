@@ -49,6 +49,7 @@ export interface ShopProfile {
   area_id: number;
   area_name: string;
   location_detail: string;
+  address?: string;
   building_code?: string;       // Mã tòa/cụm
   floor?: string;               // Tầng (nếu có)
   unit_number?: string;         // Số phòng/căn
@@ -207,6 +208,7 @@ export interface Order {
   delivery_fee: number;
   total_amount: number;
   promotion_code?: string;
+  promotion_id?: number;
   payment_method: 'COD' | 'ONLINE' | 'WALLET';
   payment_status: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED' | 'COD_PENDING';
   order_status: 'PLACED' | 'CONFIRMED' | 'PREPARING' | 'READY_FOR_PICKUP' | 'ASSIGNED' | 'PICKED_UP' | 'DELIVERING' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
