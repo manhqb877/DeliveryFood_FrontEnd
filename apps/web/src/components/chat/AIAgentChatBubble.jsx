@@ -14,8 +14,236 @@ import {
   CircleNotch,
   Sparkle,
 } from "@phosphor-icons/react";
+import {
+  CheckCircleIcon,
+  QrCodeIcon,
+  DocumentDuplicateIcon,
+  BanknotesIcon,
+  MapPinIcon,
+} from '@heroicons/react/24/outline';
 
 const AI_AGENT_URL = process.env.NEXT_PUBLIC_AI_AGENT_URL || 'http://localhost:8088';
+
+// ─── Helpers for Order & Guest Session ─────────────────────────────────────────
+function getStoredGuestSessionId() {
+  if (typeof window === 'undefined') return null;
+  const id = localStorage.getItem('befood_guest_session_id');
+  if (!id) return null;
+  return parseInt(id, 10);
+}
+
+function parseOrderDataFromText(text) {
+  if (!text) return { cleanText: text, orderData: null };
+  const match = text.match(/<!--\s*ORDER_DATA:\s*(\{.*?\})\s*-->/s);
+  if (match) {
+    try {
+      const orderData = JSON.parse(match[1]);
+      const cleanText = text.replace(/<!--\s*ORDER_DATA:\s*\{.*?\}\s*-->/s, '').trim();
+      return { cleanText, orderData };
+    } catch (e) {}
+  }
+  return { cleanText: text, orderData: null };
+}
+
+// ─── Thẻ xác nhận đơn hàng COD ────────────────────────────────────────────────
+function CODOrderCard({ order }) {
+  if (!order) return null;
+  const orderId = order.order_id || order.id;
+  const orderCode = order.order_code || order.orderCode || `ORD${orderId}`;
+  const totalAmount = order.total_amount || order.totalAmount || 0;
+  const address = typeof order.delivery_address === 'string'
+    ? order.delivery_address
+    : (order.delivery_address?.fullAddress || order.delivery_address?.addressLine || 'Giao theo địa chỉ của bạn');
+
+  return (
+    <div className="mt-3 p-3.5 rounded-xl bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-200 text-slate-800 shadow-xs space-y-2.5">
+      <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-xs">
+        <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+        <span>Đã đặt đơn thành công (Tiền mặt COD)</span>
+      </div>
+      <div className="text-[11px] space-y-1 bg-white/90 p-2.5 rounded-lg border border-emerald-100">
+        <div className="flex justify-between items-center">
+          <span className="text-slate-500">Mã đơn hàng:</span>
+          <strong className="font-mono text-emerald-800 font-bold">#{orderCode}</strong>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-slate-500">Tổng thanh toán:</span>
+          <strong className="text-rose-600 font-bold text-xs">
+            {Number(totalAmount).toLocaleString('vi-VN')}đ
+          </strong>
+        </div>
+        <div className="flex items-start gap-1 pt-1 text-slate-600">
+          <MapPinIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+          <span className="line-clamp-2">{address}</span>
+        </div>
+      </div>
+      <div className="text-[10px] text-emerald-700 flex items-center gap-1 font-medium">
+        <BanknotesIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+        <span>Chuẩn bị đúng tiền mặt khi shipper giao hàng</span>
+      </div>
+      <Link
+        href={`/orders/${orderId}`}
+        className="block w-full text-center py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
+      >
+        🛵 Xem chi tiết & Theo dõi đơn
+      </Link>
+    </div>
+  );
+}
+
+// ─── Thẻ thanh toán Chuyển khoản VietQR SePay ─────────────────────────────────
+function VietQRPaymentCard({ order, paymentQr }) {
+  if (!order) return null;
+  const orderId = order.order_id || order.id;
+  const orderCode = order.order_code || order.orderCode || `ORD${orderId}`;
+  const totalAmount = order.total_amount || order.totalAmount || paymentQr?.amount || 0;
+  const qrData = paymentQr || order.payment_qr || {};
+
+  const bankName = qrData.bankName || 'MBBank';
+  const accountNumber = qrData.accountNumber || '025452790502';
+  const accountHolder = qrData.accountHolder || 'NGUYEN THAI AN';
+  const paymentDesc = qrData.paymentDescription || orderCode;
+
+  const defaultQrUrl = qrData.qrUrl || `https://qr.sepay.vn/img?acc=${accountNumber}&bank=${bankName}&amount=${Number(totalAmount)}&des=${encodeURIComponent(paymentDesc)}`;
+
+  const [isPaid, setIsPaid] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
+
+  const handleCopy = (text, field) => {
+    try {
+      navigator.clipboard?.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (e) {}
+  };
+
+  // Tự động kiểm tra trạng thái thanh toán từ SePay mỗi 3 giây
+  useEffect(() => {
+    if (isPaid || !orderId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`http://localhost:8080/api/v1/payments/status/${orderId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && (data.status === 'SUCCESS' || data.paymentStatus === 'SUCCESS')) {
+            setIsPaid(true);
+            window.dispatchEvent(new Event('cart-updated'));
+            clearInterval(interval);
+          }
+        }
+      } catch (e) {}
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [orderId, isPaid]);
+
+  return (
+    <div className="mt-3 p-3.5 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 text-slate-800 shadow-xs space-y-2.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 font-bold text-xs text-blue-900">
+          <QrCodeIcon className="w-4 h-4 text-blue-600 shrink-0" />
+          <span>Chuyển khoản VietQR SePay</span>
+        </div>
+        {isPaid ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+            <CheckCircleIcon className="w-3 h-3 text-emerald-600" />
+            ĐÃ THANH TOÁN
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+            Chờ quét mã...
+          </span>
+        )}
+      </div>
+
+      {isPaid ? (
+        <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-center space-y-1.5">
+          <CheckCircleIcon className="w-8 h-8 text-emerald-600 mx-auto" />
+          <div className="text-xs font-extrabold text-emerald-800">Thanh toán thành công! 🎉</div>
+          <p className="text-[11px] text-emerald-700">Đơn hàng #{orderCode} đã được SePay xác nhận.</p>
+          <Link
+            href={`/orders/${orderId}`}
+            className="inline-block mt-1.5 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
+          >
+            Xem hóa đơn & Chi tiết đơn
+          </Link>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col items-center justify-center p-2.5 bg-white rounded-xl border border-blue-100 shadow-xs">
+            <img
+              src={defaultQrUrl}
+              alt="VietQR SePay"
+              className="w-36 h-36 object-contain rounded-lg"
+              onError={(e) => {
+                e.currentTarget.src = `https://img.vietqr.io/image/MB-${accountNumber}-compact2.png?amount=${Number(totalAmount)}&addInfo=${encodeURIComponent(paymentDesc)}&accountName=${encodeURIComponent(accountHolder)}`;
+              }}
+            />
+            <span className="text-[10px] text-slate-500 mt-1 font-medium">Mở App ngân hàng bất kỳ để quét QR</span>
+          </div>
+
+          <div className="text-[11px] space-y-1.5 bg-white p-2.5 rounded-lg border border-slate-200">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Ngân hàng:</span>
+              <strong className="text-slate-800">{bankName} (Quân Đội)</strong>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Số tài khoản:</span>
+              <div className="flex items-center gap-1.5">
+                <strong className="font-mono text-slate-900">{accountNumber}</strong>
+                <button
+                  onClick={() => handleCopy(accountNumber, 'acc')}
+                  className="text-blue-600 hover:text-blue-800 font-bold p-0.5"
+                  title="Sao chép"
+                >
+                  <DocumentDuplicateIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Chủ tài khoản:</span>
+              <strong className="text-slate-800 uppercase">{accountHolder}</strong>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Số tiền:</span>
+              <strong className="text-rose-600 font-bold text-xs">
+                {Number(totalAmount).toLocaleString('vi-VN')}đ
+              </strong>
+            </div>
+
+            <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+              <span className="text-slate-500">Nội dung CK:</span>
+              <div className="flex items-center gap-1.5">
+                <strong className="font-mono text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded">{paymentDesc}</strong>
+                <button
+                  onClick={() => handleCopy(paymentDesc, 'des')}
+                  className="text-blue-600 hover:text-blue-800 font-bold p-0.5"
+                  title="Sao chép nội dung"
+                >
+                  <DocumentDuplicateIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+            {copiedField && (
+              <div className="text-[10px] text-center text-emerald-600 font-bold">
+                Đã sao chép {copiedField === 'acc' ? 'số tài khoản' : 'nội dung'}!
+              </div>
+            )}
+          </div>
+
+          <div className="text-[10px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
+            ⚠️ Giữ nguyên <strong>Nội dung ({paymentDesc})</strong> để SePay tự động xác nhận đơn tức thì!
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 // ─── Session & history persistence ───────────────────────────────────────────
 const HISTORY_KEY_PREFIX = 'ai_chat_history_';
@@ -268,11 +496,21 @@ export default function AIAgentChatBubble() {
         };
         if (jwt) headers['Authorization'] = `Bearer ${jwt}`;
 
+        const guest_session_id = getStoredGuestSessionId();
+        const user_id = user?.id || null;
+
         let res;
         const fetchOptions = {
           method: 'POST',
           headers,
-          body: JSON.stringify({ session_id: sessionId, message: userText, area_code, user_type }),
+          body: JSON.stringify({
+            session_id: sessionId,
+            message: userText,
+            area_code,
+            user_type,
+            user_id,
+            guest_session_id,
+          }),
           signal: AbortSignal.timeout(45000), // 45 giây timeout, tránh xoay vô tận
         };
 
@@ -298,9 +536,17 @@ export default function AIAgentChatBubble() {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
           text: data.reply || '(Không có phản hồi)',
+          order_info: data.order_info || null,
+          payment_qr: data.payment_qr || null,
           ts: Date.now(),
         };
         setMessages((prev) => [...prev, botMsg]);
+
+        // Tự động kích hoạt cập nhật giỏ hàng trên giao diện Web khi AI thêm món hoặc tạo đơn
+        if (data.cart_updated || data.order_info) {
+          window.dispatchEvent(new Event('cart-updated'));
+        }
+
         if (!isOpen) setUnread((u) => u + 1);
       } catch (err) {
         setMessages((prev) => [
@@ -476,7 +722,30 @@ export default function AIAgentChatBubble() {
                     : {}
                 }
               >
-                <SimpleMarkdown text={msg.text} />
+                {(() => {
+                  const { cleanText, orderData } = parseOrderDataFromText(msg.text);
+                  const currentOrder = msg.order_info || orderData;
+                  const currentPaymentQr = msg.payment_qr || currentOrder?.payment_qr;
+                  const isOnlineQr = currentOrder && (
+                    currentOrder.payment_method === 'ONLINE' ||
+                    currentOrder.payment_method === 'SEPAY' ||
+                    currentOrder.payment_method === 'VIETQR' ||
+                    Boolean(currentPaymentQr)
+                  );
+
+                  return (
+                    <>
+                      <SimpleMarkdown text={cleanText} />
+                      {currentOrder && (
+                        isOnlineQr ? (
+                          <VietQRPaymentCard order={currentOrder} paymentQr={currentPaymentQr} />
+                        ) : (
+                          <CODOrderCard order={currentOrder} />
+                        )
+                      )}
+                    </>
+                  );
+                })()}
                 <p className={`text-[10px] mt-1.5 ${
                   msg.role === 'user' ? 'text-violet-200' : 'text-gray-400'
                 }`}>

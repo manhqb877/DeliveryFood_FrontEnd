@@ -99,6 +99,18 @@ export function CartProvider({ children }) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAllCarts();
+
+    // Lắng nghe sự kiện cart-updated từ AI Agent hoặc các tab khác để tự động đồng bộ giỏ hàng
+    const handleCartUpdated = () => {
+      fetchAllCarts();
+    };
+
+    window.addEventListener('cart-updated', handleCartUpdated);
+    window.addEventListener('storage', handleCartUpdated);
+    return () => {
+      window.removeEventListener('cart-updated', handleCartUpdated);
+      window.removeEventListener('storage', handleCartUpdated);
+    };
   }, [fetchAllCarts]);
 
   // Thêm món vào giỏ
