@@ -38,10 +38,14 @@ export default function OrderDetailsPage() {
   useEffect(() => {
     if (params.id) {
       fetchOrderDetails(params.id);
+      const interval = setInterval(() => {
+        fetchOrderDetails(params.id, true);
+      }, 3000);
+      return () => clearInterval(interval);
     }
   }, [params.id]);
 
-  const fetchOrderDetails = async (orderId) => {
+  const fetchOrderDetails = async (orderId, isPolling = false) => {
     try {
       // Lấy từ authService hoặc TOKEN_KEYS
       let token = null;
@@ -88,14 +92,20 @@ export default function OrderDetailsPage() {
         } catch (e) {
           console.warn('Could not fetch delivery data:', e);
         }
-      } else {
+      } else if (!isPolling) {
         setError('Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn này.');
       }
-      checkReview(orderId);
+      if (!isPolling) {
+        checkReview(orderId);
+      }
     } catch (err) {
-      setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      if (!isPolling) {
+        setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      }
     } finally {
-      setLoading(false);
+      if (!isPolling) {
+        setLoading(false);
+      }
     }
   };
 
@@ -323,7 +333,7 @@ export default function OrderDetailsPage() {
         </div>
 
         {/* Vị trí Shipper (hiện khi đang lấy hàng hoặc đang giao) */}
-        {order.orderStatus !== 'CANCELLED' && ['PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'DELIVERING'].includes(order.orderStatus) && deliveryData?.shipperId && (
+        {order.orderStatus !== 'CANCELLED' && ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'PICKED_UP', 'DELIVERING'].includes(order.orderStatus) && deliveryData && (
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
             <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
               <MapPin className="w-5 h-5 text-red-600" />
