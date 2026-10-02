@@ -55,6 +55,17 @@ export default function TrackingPage() {
     }
   }, []);
 
+  // Polling cập nhật tiến trình đơn hàng và vị trí giao hàng mỗi 3 giây
+  useEffect(() => {
+    if (!orderCode) return;
+    const interval = setInterval(() => {
+      if (order && !['DELIVERED', 'COMPLETED', 'CANCELLED'].includes(order.orderStatus)) {
+        fetchOrderByCode(orderCode, true);
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [orderCode, order?.orderStatus]);
+
   const fetchUserOrders = async () => {
     setLoadingUserOrders(true);
     try {
@@ -94,12 +105,14 @@ export default function TrackingPage() {
     }
   };
 
-  const fetchOrderByCode = async (codeToSearch) => {
+  const fetchOrderByCode = async (codeToSearch, isSilent = false) => {
     if (!codeToSearch || !codeToSearch.trim()) return;
 
-    setLoading(true);
-    setError('');
-    setOrder(null);
+    if (!isSilent) {
+      setLoading(true);
+      setError('');
+      setOrder(null);
+    }
 
     try {
       const res = await fetch(`${API_GATEWAY}/orders/code/${codeToSearch.trim()}`);
@@ -121,9 +134,13 @@ export default function TrackingPage() {
         console.warn('Could not fetch delivery data:', e);
       }
     } catch (err) {
-      setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      if (!isSilent) {
+        setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      }
     } finally {
-      setLoading(false);
+      if (!isSilent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -520,8 +537,8 @@ export default function TrackingPage() {
 
             {/* Vị trí Shipper (hiện khi đang lấy hàng hoặc đang giao) */}
             {order.orderStatus !== 'CANCELLED' &&
-              ['PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'DELIVERING'].includes(order.orderStatus) &&
-              deliveryData?.shipperId && (
+              ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'PICKED_UP', 'DELIVERING'].includes(order.orderStatus) &&
+              deliveryData && (
                 <div className="mb-8">
                   <h3 className="font-bold text-gray-900 mb-3 uppercase tracking-wide text-xs md:text-sm border-b pb-2 flex items-center gap-2">
                     <Truck className="w-4 h-4 text-orange-500" />

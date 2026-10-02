@@ -1,16 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-import { useShipperTracking } from '../hooks/useShipperTracking';
-import { MapPin, Navigation } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import { useShipperTracking } from "../hooks/useShipperTracking";
 
 // Reset Leaflet icon default
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
 
 // Custom Icons (matching AppShipper React Native UI)
@@ -25,7 +24,7 @@ const createCustomIcon = (bgColor: string, size: number, svgIcon: string) => {
         ${svgIcon}
       </div>
     `,
-    className: 'custom-leaflet-marker',
+    className: "custom-leaflet-marker",
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2],
@@ -36,11 +35,11 @@ const storeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
 const customerSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
 const shipperSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm-3 11.5V14l-3-3 4-3 2 3h2"/></svg>`;
 
-const shopIcon = createCustomIcon('#1D4ED8', 38, storeSvg);
-const customerIcon = createCustomIcon('#EA580C', 38, customerSvg);
-const shipperIcon = createCustomIcon('#10B981', 44, shipperSvg);
+const shopIcon = createCustomIcon("#1D4ED8", 38, storeSvg);
+const customerIcon = createCustomIcon("#EA580C", 38, customerSvg);
+const shipperIcon = createCustomIcon("#10B981", 44, shipperSvg);
 
-export const VIETMAP_API_KEY = '809bdd000025b62b0e9710b82e28f65f6178ee698cdb1845';
+export const VIETMAP_API_KEY = "809bdd000025b62b0e9710b82e28f65f6178ee698cdb1845";
 
 interface ShipperTrackingMapProps {
   shipperId?: number;
@@ -48,7 +47,7 @@ interface ShipperTrackingMapProps {
   deliveryLocation?: { lat: number; lng: number };
 }
 
-// Component phụ để tự động căn chỉnh khung hình bản đồ
+// Component tự động căn chỉnh khung hình bản đồ
 function MapFitter({ routeShop, routeCustomer, pickupLocation, deliveryLocation, location }: any) {
   const map = useMap();
 
@@ -77,7 +76,7 @@ export function ShipperTrackingMap({ shipperId, pickupLocation, deliveryLocation
   const [routeToShop, setRouteToShop] = useState<[number, number][]>([]);
   const [routeToCustomer, setRouteToCustomer] = useState<[number, number][]>([]);
 
-  const fetchVietmapRoute = async (from: { lat: number, lng: number }, to: { lat: number, lng: number }) => {
+  const fetchVietmapRoute = async (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
     try {
       const url = `https://maps.vietmap.vn/api/route?api-version=1.1&apikey=${VIETMAP_API_KEY}&point=${from.lat},${from.lng}&point=${to.lat},${to.lng}&vehicle=motorcycle&points_encoded=false`;
       const res = await fetch(url);
@@ -86,44 +85,68 @@ export function ShipperTrackingMap({ shipperId, pickupLocation, deliveryLocation
         return data.paths[0].points.coordinates.map((c: any) => [c[1], c[0]]);
       }
     } catch (e) {
-      console.warn('Vietmap fetch error', e);
+      console.warn("Vietmap fetch error", e);
     }
-    return [];
+    // Fallback: đường thẳng nối 2 điểm nếu API lỗi
+    return [
+      [from.lat, from.lng] as [number, number],
+      [to.lat, to.lng] as [number, number],
+    ];
   };
 
-  const [routeFetched, setRouteFetched] = useState(false);
-
+  // 1. Fetch route Shop -> Customer (Màu cam) - Không cần chờ có shipper
   useEffect(() => {
-    const loadRoutes = async () => {
-      // Chỉ fetch tuyến đường 1 lần khi đã có đủ toạ độ
-      if (routeFetched) return;
-      if (!location || !pickupLocation || !deliveryLocation) return;
+    if (!pickupLocation?.lat || !deliveryLocation?.lat) return;
 
-      // 1. Shipper -> Shop (Blue Route)
-      const route1 = await fetchVietmapRoute(location, pickupLocation);
-      setRouteToShop(route1);
-      
-      // 2. Shop -> Customer (Orange Route)
-      const route2 = await fetchVietmapRoute(pickupLocation, deliveryLocation);
-      setRouteToCustomer(route2);
+    fetchVietmapRoute(pickupLocation, deliveryLocation).then((coords) => {
+      if (coords && coords.length > 0) {
+        setRouteToCustomer(coords);
+      }
+    });
+  }, [pickupLocation?.lat, pickupLocation?.lng, deliveryLocation?.lat, deliveryLocation?.lng]);
 
-      setRouteFetched(true);
-    };
-    
-    loadRoutes();
-  }, [location?.lat, location?.lng, pickupLocation?.lat, pickupLocation?.lng, deliveryLocation?.lat, deliveryLocation?.lng, routeFetched]);
+  // 2. Fetch route Shipper -> Shop (Màu xanh) khi có location của Shipper
+  useEffect(() => {
+    if (!location?.lat || !pickupLocation?.lat) return;
+
+    fetchVietmapRoute(location, pickupLocation).then((coords) => {
+      if (coords && coords.length > 0) {
+        setRouteToShop(coords);
+      }
+    });
+  }, [location?.lat, location?.lng, pickupLocation?.lat, pickupLocation?.lng]);
 
   const defaultCenter: [number, number] = [10.7769, 106.7009];
-  const center: [number, number] = location ? [location.lat, location.lng] : (pickupLocation ? [pickupLocation.lat, pickupLocation.lng] : defaultCenter);
+  const center: [number, number] = location
+    ? [location.lat, location.lng]
+    : pickupLocation
+    ? [pickupLocation.lat, pickupLocation.lng]
+    : defaultCenter;
+
+  const hasShipper = !!shipperId;
 
   return (
     <div className="w-full h-full relative flex flex-col rounded-xl overflow-hidden border border-slate-200 shadow-sm">
       <div className="absolute top-4 left-4 z-[400] bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-md flex items-center gap-2 text-sm font-semibold text-slate-700">
         <span className="relative flex h-3 w-3">
-          {isConnected && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
-          <span className={`relative inline-flex rounded-full h-3 w-3 ${isConnected ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+          {hasShipper && isConnected && (
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          )}
+          <span
+            className={`relative inline-flex rounded-full h-3 w-3 ${
+              hasShipper && isConnected
+                ? "bg-emerald-500"
+                : hasShipper
+                ? "bg-amber-500 animate-pulse"
+                : "bg-slate-400 animate-pulse"
+            }`}
+          ></span>
         </span>
-        {isConnected ? 'Shipper trực tuyến' : 'Đang tìm Shipper...'}
+        {hasShipper
+          ? isConnected
+            ? "Shipper trực tuyến"
+            : "Đang định vị Shipper..."
+          : "Đang tìm Shipper..."}
       </div>
 
       <MapContainer center={center} zoom={13} className="w-full h-64 md:h-80 z-0">
@@ -132,18 +155,18 @@ export function ShipperTrackingMap({ shipperId, pickupLocation, deliveryLocation
           attribution="&copy; Google Maps"
         />
 
-        <MapFitter 
-          routeShop={routeToShop} 
+        <MapFitter
+          routeShop={routeToShop}
           routeCustomer={routeToCustomer}
-          pickupLocation={pickupLocation} 
-          deliveryLocation={deliveryLocation} 
-          location={location} 
+          pickupLocation={pickupLocation}
+          deliveryLocation={deliveryLocation}
+          location={location}
         />
 
         {routeToShop.length > 0 && (
           <Polyline positions={routeToShop} color="#3B82F6" weight={5} opacity={0.8} lineCap="round" lineJoin="round" />
         )}
-        
+
         {routeToCustomer.length > 0 && (
           <Polyline positions={routeToCustomer} color="#F97316" weight={5} opacity={0.8} lineCap="round" lineJoin="round" />
         )}
