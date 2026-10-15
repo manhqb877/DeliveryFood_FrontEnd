@@ -14,6 +14,7 @@ import {
   ChatCircleDots,
   PhoneCall
 } from "@phosphor-icons/react";
+import { useLanguage } from '@/context/LanguageContext';
 
 const VIETMAP_API_KEY = "809bdd000025b62b0e9710b82e28f65f6178ee698cdb1845";
 
@@ -68,6 +69,7 @@ function LazyImage({ src, alt, className = "", wrapperClassName = "", fallbackSr
 }
 
 export default function CustomerHome() {
+  const { t } = useLanguage();
   const [addressQuery, setAddressQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [autocompleteResults, setAutocompleteResults] = useState([]);
@@ -288,8 +290,8 @@ export default function CustomerHome() {
             ref={dropdownRef}
             className="absolute top-1/2 left-4 md:left-12 lg:left-24 -translate-y-1/2 w-[92%] sm:w-[440px] md:w-[470px] bg-white rounded-3xl p-6 md:p-8 shadow-2xl z-30 border border-gray-100/80 backdrop-blur-md animate-in fade-in slide-in-from-bottom-5 duration-700 ease-out"
           >
-            <h1 className="text-[24px] md:text-[30px] font-black text-gray-900 mb-4 leading-tight">
-              Địa chỉ bạn muốn giao món
+            <h1 className="text-[24px] md:text-[30px] font-black text-gray-900 mb-4 leading-tight" suppressHydrationWarning>
+              {t('home_address_box_title', 'Địa chỉ bạn muốn giao món')}
             </h1>
 
             {/* Input with Autocomplete */}
@@ -301,7 +303,7 @@ export default function CustomerHome() {
                 
                 <input
                   type="text"
-                  placeholder="Nhập địa chỉ giao hàng"
+                  placeholder={t('home_address_placeholder', 'Nhập địa chỉ giao hàng')}
                   value={addressQuery}
                   onChange={handleInputChange}
                   onFocus={() => {
@@ -316,7 +318,7 @@ export default function CustomerHome() {
                       type="button"
                       onClick={handleClear}
                       className="p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
-                      title="Xóa địa chỉ"
+                      title={t('home_clear_address', 'Xóa địa chỉ')}
                     >
                       <X size={15} weight="bold" />
                     </button>
@@ -327,7 +329,7 @@ export default function CustomerHome() {
                     onClick={handleGetCurrentLocation}
                     disabled={isLocating}
                     className="p-1.5 rounded-xl hover:bg-amber-50 text-gray-500 hover:text-[#FFB700] transition-colors cursor-pointer"
-                    title="Vị trí hiện tại"
+                    title={t('home_current_location', 'Vị trí hiện tại')}
                   >
                     {isLocating ? (
                       <CircleNotch size={19} weight="bold" className="animate-spin text-[#FFB700]" />
@@ -344,7 +346,7 @@ export default function CustomerHome() {
                   {isSearching ? (
                     <div className="p-4 text-xs font-medium text-gray-400 text-center flex items-center justify-center gap-2">
                       <CircleNotch size={16} weight="bold" className="animate-spin text-[#FFB700]" />
-                      <span>Đang tìm địa chỉ...</span>
+                      <span suppressHydrationWarning>{t('home_searching_address', 'Đang tìm địa chỉ...')}</span>
                     </div>
                   ) : autocompleteResults.length > 0 ? (
                     autocompleteResults.map((item, idx) => (
@@ -368,8 +370,8 @@ export default function CustomerHome() {
                       </button>
                     ))
                   ) : (
-                    <div className="p-4 text-xs text-gray-400 text-center">
-                      Không tìm thấy địa chỉ
+                    <div className="p-4 text-xs text-gray-400 text-center" suppressHydrationWarning>
+                      {t('home_not_found_address', 'Không tìm thấy địa chỉ')}
                     </div>
                   )}
                 </div>
@@ -380,15 +382,15 @@ export default function CustomerHome() {
             {selectedLocation && nearbyShops.length > 0 && (
               <div className="mt-4 pt-4 border-t border-gray-100">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5" suppressHydrationWarning>
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    Gần bạn
+                    {t('home_near_you', 'Gần bạn')}
                   </span>
                   <Link 
                     href="/order" 
                     className="text-xs font-semibold text-gray-600 hover:text-black flex items-center gap-1 transition-colors"
                   >
-                    Xem thêm <ArrowRight size={12} weight="bold" />
+                    <span suppressHydrationWarning>{t('home_view_more', 'Xem thêm')}</span> <ArrowRight size={12} weight="bold" />
                   </Link>
                 </div>
 
@@ -439,8 +441,8 @@ export default function CustomerHome() {
           <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900">
-                  {selectedLocation ? "GẦN BẠN" : "NỔI BẬT"}
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900" suppressHydrationWarning>
+                  {selectedLocation ? t('home_near_you', 'GẦN BẠN') : t('home_featured', 'NỔI BẬT')}
                 </span>
                 {selectedLocation && (
                   <span className="text-xs text-gray-500 font-medium truncate max-w-xs md:max-w-md flex items-center gap-1">
@@ -449,8 +451,8 @@ export default function CustomerHome() {
                   </span>
                 )}
               </div>
-              <h2 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">
-                {selectedLocation ? "Quán ngon gần bạn" : "Quán ngon nổi bật"}
+              <h2 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight" suppressHydrationWarning>
+                {selectedLocation ? t('home_shops_near_you', 'Quán ngon gần bạn') : t('home_shops_featured', 'Quán ngon nổi bật')}
               </h2>
             </div>
 
@@ -458,7 +460,7 @@ export default function CustomerHome() {
               href="/order"
               className="text-sm font-bold text-gray-700 hover:text-black flex items-center gap-1.5 transition-colors group"
             >
-              <span>Xem tất cả ({nearbyShops.length})</span>
+              <span suppressHydrationWarning>{t('home_view_all', 'Xem tất cả')} ({nearbyShops.length})</span>
               <ArrowRight size={15} weight="bold" className="group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
@@ -503,15 +505,15 @@ export default function CustomerHome() {
                         <span>{formatDistance(shop.distanceKm)}</span>
                       </div>
                     ) : (
-                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-[11px] font-medium">
-                        Giao tận nơi
+                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-[11px] font-medium" suppressHydrationWarning>
+                        {t('home_direct_delivery', 'Giao tận nơi')}
                       </div>
                     )}
 
                     {/* Prep Time Badge */}
-                    <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-md text-gray-800 text-[11px] font-semibold flex items-center gap-1 shadow-2xs">
+                    <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-md text-gray-800 text-[11px] font-semibold flex items-center gap-1 shadow-2xs" suppressHydrationWarning>
                       <Clock size={12} weight="bold" className="text-gray-500" />
-                      <span>~{shop.avgPrepTimeMinutes || 15} phút</span>
+                      <span>~{shop.avgPrepTimeMinutes || 15} {t('home_minutes', 'phút')}</span>
                     </div>
                   </div>
 
@@ -533,13 +535,13 @@ export default function CustomerHome() {
                     </div>
 
                     <div className="mt-auto pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
-                      <span className="font-medium text-emerald-600 flex items-center gap-1.5">
+                      <span className="font-medium text-emerald-600 flex items-center gap-1.5" suppressHydrationWarning>
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Mở cửa
+                        {t('home_open', 'Mở cửa')}
                       </span>
 
-                      <span className="font-bold text-gray-800 group-hover:text-black flex items-center gap-1">
-                        Đặt món
+                      <span className="font-bold text-gray-800 group-hover:text-black flex items-center gap-1" suppressHydrationWarning>
+                        {t('home_order_action', 'Đặt món')}
                         <ArrowRight size={13} weight="bold" className="text-[#FFB700] group-hover:translate-x-1 transition-transform" />
                       </span>
                     </div>
@@ -565,20 +567,20 @@ export default function CustomerHome() {
           </div>
           {/* Right: text in cream background */}
           <div className="flex flex-1 flex-col items-center justify-center bg-[#f4f0eb] px-8 md:px-14 py-16 md:py-24 text-center">
-            <span className="px-4 py-1 rounded-full text-xs font-black tracking-widest uppercase bg-[var(--color-primary)] text-black mb-4 shadow-xs">
-              BE MEMBER REWARDS
+            <span className="px-4 py-1 rounded-full text-xs font-black tracking-widest uppercase bg-[var(--color-primary)] text-black mb-4 shadow-xs" suppressHydrationWarning>
+              {t('home_rewards_badge', 'BE MEMBER REWARDS')}
             </span>
-            <h2 className="text-[34px] font-bold leading-tight text-[#222222] md:text-[42px] whitespace-pre-line">
-              Dành riêng cho<br/>Thành viên beFood
+            <h2 className="text-[34px] font-bold leading-tight text-[#222222] md:text-[42px] whitespace-pre-line" suppressHydrationWarning>
+              {t('home_rewards_title', 'Dành riêng cho\nThành viên beFood')}
             </h2>
-            <p className="mt-4 text-base font-medium text-gray-700 max-w-md">
-              Đăng ký thành viên để nhận ngay hàng ngàn ưu đãi giảm giá, mã freeship và tích điểm đổi quà hấp dẫn mỗi ngày!
+            <p className="mt-4 text-base font-medium text-gray-700 max-w-md" suppressHydrationWarning>
+              {t('home_rewards_desc', 'Đăng ký thành viên để nhận ngay hàng ngàn ưu đãi giảm giá, mã freeship và tích điểm đổi quà hấp dẫn mỗi ngày!')}
             </p>
             <Link
               href="/order"
               className="mt-8 rounded-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-black px-10 py-3.5 text-[14px] font-black tracking-wide transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
             >
-              ĐẶT MÓN & TÍCH ĐIỂM NGAY
+              <span suppressHydrationWarning>{t('home_rewards_btn', 'ĐẶT MÓN & TÍCH ĐIỂM NGAY')}</span>
             </Link>
           </div>
         </div>
@@ -588,38 +590,38 @@ export default function CustomerHome() {
       <section className="w-full bg-white py-16 md:py-20">
         <div className="mx-auto max-w-[1240px] px-4 md:px-6">
           <div className="text-center mb-12">
-            <span className="text-xs font-black tracking-widest uppercase text-gray-400 block mb-2">
-              ƯU ĐÃI NỔI BẬT
+            <span className="text-xs font-black tracking-widest uppercase text-gray-400 block mb-2" suppressHydrationWarning>
+              {t('home_companion_badge', 'ƯU ĐÃI NỔI BẬT')}
             </span>
-            <h2 className="text-3xl font-extrabold text-[#222222] md:text-[38px] tracking-tight">
-              Luôn đồng hành cùng bạn
+            <h2 className="text-3xl font-extrabold text-[#222222] md:text-[38px] tracking-tight" suppressHydrationWarning>
+              {t('home_companion_title', 'Luôn đồng hành cùng bạn')}
             </h2>
           </div>
           
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3 lg:gap-8">
             {[
               {
-                label: "ĐẶT HÀNG NGAY",
+                label: t('home_order_now_caps', 'ĐẶT HÀNG NGAY'),
                 link: "/order",
                 img: "https://imgmainsite.be.com.vn/2022/07/2c763054-810x540_freeship-m%E1%BB%8Di-%C4%91%C6%A1n-h%C3%A0ng.jpg",
-                tag: "Giao nhanh 30 phút"
+                tag: t('home_fast_30m', 'Giao nhanh 30 phút')
               },
               {
-                label: "HỖ TRỢ KHÁCH HÀNG",
+                label: t('home_support_caps', 'HỖ TRỢ KHÁCH HÀNG'),
                 link: "/support",
                 img: "https://upload.urbox.vn/strapi/befood_002_44f7e2ed23.jpg",
-                tag: "beFood Care 24/7"
+                tag: t('home_care_247', 'beFood Care 24/7')
               },
               {
-                label: "TIN TỨC MỖI NGÀY",
+                label: t('home_news_caps', 'TIN TỨC MỖI NGÀY'),
                 link: "/news",
                 img: "https://imgmainsite.be.com.vn/2023/02/cf4641ee-thay-doi-gia-befood_600x450.jpg",
-                tag: "Cập nhật liên tục"
+                tag: t('home_news_daily', 'Cập nhật liên tục')
               },
             ].map((item, idx) => (
               <Link href={item.link} key={idx} className="flex flex-col items-center cursor-pointer group">
                 <div className="overflow-hidden rounded-2xl w-full shadow-md border border-gray-100 bg-gray-50 relative aspect-[4/3]">
-                  <span className="absolute top-3 left-3 z-10 px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-black/70 text-white backdrop-blur-xs">
+                  <span className="absolute top-3 left-3 z-10 px-2.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-black/70 text-white backdrop-blur-xs" suppressHydrationWarning>
                     {item.tag}
                   </span>
                   <LazyImage 
@@ -629,7 +631,7 @@ export default function CustomerHome() {
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
                   />
                 </div>
-                <p className="mt-4 text-center text-[15px] font-extrabold uppercase tracking-wide text-[#222222] group-hover:text-[var(--color-primary-dark)] transition-colors">
+                <p className="mt-4 text-center text-[15px] font-extrabold uppercase tracking-wide text-[#222222] group-hover:text-[var(--color-primary-dark)] transition-colors" suppressHydrationWarning>
                   {item.label}
                 </p>
               </Link>
@@ -677,20 +679,20 @@ export default function CustomerHome() {
       <section className="w-full bg-[#f9f4ec] overflow-hidden">
         <div className="flex flex-col md:flex-row w-full items-stretch">
           <div className="flex flex-1 flex-col items-center justify-center px-8 md:px-16 py-16 md:py-24 text-center">
-            <span className="px-3.5 py-1 rounded-full text-xs font-black tracking-widest uppercase bg-white border border-gray-200 text-gray-700 mb-4 shadow-2xs">
-              MẠNG LƯỚI QUÁN ĂN TOÀN QUỐC
+            <span className="px-3.5 py-1 rounded-full text-xs font-black tracking-widest uppercase bg-white border border-gray-200 text-gray-700 mb-4 shadow-2xs" suppressHydrationWarning>
+              {t('home_network_badge', 'MẠNG LƯỚI QUÁN ĂN TOÀN QUỐC')}
             </span>
-            <h2 className="text-[34px] font-bold leading-tight text-[#222222] md:text-[42px] whitespace-pre-line">
-              Mạng lưới cửa hàng beFood
+            <h2 className="text-[34px] font-bold leading-tight text-[#222222] md:text-[42px] whitespace-pre-line" suppressHydrationWarning>
+              {t('home_network_title', 'Mạng lưới cửa hàng beFood')}
             </h2>
-            <p className="mt-4 text-[15px] font-medium text-[#555555] max-w-md">
-              Hàng ngàn quán ăn, nhà hàng yêu thích và tài xế beFood luôn sẵn sàng phục vụ món ngon tận tay bạn nhanh chóng!
+            <p className="mt-4 text-[15px] font-medium text-[#555555] max-w-md" suppressHydrationWarning>
+              {t('home_network_desc', 'Hàng ngàn quán ăn, nhà hàng yêu thích và tài xế beFood luôn sẵn sàng phục vụ món ngon tận tay bạn nhanh chóng!')}
             </p>
             <Link
               href="/order"
               className="mt-8 rounded-full bg-[#002B5E] hover:bg-[#001f44] text-white px-10 py-3.5 text-[14px] font-black tracking-wide transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
             >
-              KHÁM PHÁ CỬA HÀNG
+              <span suppressHydrationWarning>{t('home_explore_shops', 'KHÁM PHÁ CỬA HÀNG')}</span>
             </Link>
           </div>
           <div className="flex-1 overflow-hidden bg-gray-100 flex items-center justify-center">

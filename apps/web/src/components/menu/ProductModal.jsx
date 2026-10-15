@@ -10,7 +10,7 @@ const groupBy = (array, key) => {
   }, {});
 };
 
-export default function ProductModal({ product, isOpen, onClose, shopId, areaId, editingItem, onSaveEdit }) {
+export default function ProductModal({ product, isOpen, onClose, shopId, areaId, editingItem, onSaveEdit, isShopClosed }) {
   const [selectedOptions, setSelectedOptions] = useState({});
   const [quantity, setQuantity] = useState(1);
   const [itemNote, setItemNote] = useState('');
@@ -113,6 +113,11 @@ export default function ProductModal({ product, isOpen, onClose, shopId, areaId,
   };
 
   const handleSaveAction = async () => {
+    if (isShopClosed) {
+      alert('Quán hiện đang đóng cửa hoặc tạm ngưng nhận đơn. Quý khách vui lòng quay lại sau!');
+      return;
+    }
+
     // Validate
     for (const [groupName, group] of Object.entries(optionGroups)) {
       const isRequired = group[0].isRequired && !group[0].isMultiple;
@@ -195,6 +200,13 @@ export default function ProductModal({ product, isOpen, onClose, shopId, areaId,
             </div>
           </div>
 
+          {isShopClosed && (
+            <div className="bg-red-50 border-b border-red-200 px-5 py-2.5 flex items-center gap-2 text-red-700 text-xs font-bold shrink-0">
+              <span className="text-base">⛔</span>
+              <span>Quán hiện đang đóng cửa hoặc tạm ngừng nhận đơn. Quý khách chưa thể thêm món này vào giỏ hàng.</span>
+            </div>
+          )}
+
           <div className="p-5 flex-1 overflow-y-auto bg-gray-50/50">
             <div className="bg-white border border-gray-200 rounded-xl mb-5 focus-within:ring-2 ring-[var(--color-primary)]/50">
               <textarea 
@@ -250,10 +262,18 @@ export default function ProductModal({ product, isOpen, onClose, shopId, areaId,
 
             <button 
               onClick={handleSaveAction}
-              disabled={adding || addedSuccess}
-              className={`flex-1 h-12 font-bold text-[15px] rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] disabled:opacity-70 ${addedSuccess ? 'bg-green-500 text-white' : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-black'}`}
+              disabled={adding || addedSuccess || isShopClosed}
+              className={`flex-1 h-12 font-bold text-[15px] rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 ${
+                isShopClosed 
+                  ? 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-80' 
+                  : addedSuccess 
+                  ? 'bg-green-500 text-white cursor-pointer' 
+                  : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-black cursor-pointer active:scale-[0.98]'
+              }`}
             >
-              {addedSuccess ? (
+              {isShopClosed ? (
+                <span>⛔ Quán đang đóng cửa - Không thể đặt</span>
+              ) : addedSuccess ? (
                 <><CheckCircleIcon className="w-5 h-5" />Đã lưu thành công!</>
               ) : adding ? (
                 <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />

@@ -22,6 +22,7 @@ import {
   Receipt
 } from 'lucide-react';
 import { NotificationBell } from '@/components/ui/NotificationBell';
+import { useToast } from '@/components/ui/Toast';
 
 function playShopNotificationChime() {
   try {
@@ -56,6 +57,7 @@ interface MenuGroup {
 }
 
 export function ShopLayout() {
+  const { success } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser, setRole, logout } = useAuth();
@@ -122,14 +124,18 @@ export function ShopLayout() {
 
   const toggleIsOpen = async () => {
     if (!shop) return;
-    const updated = await dbService.updateShopProfile(shop.id, { is_open: !shop.is_open });
+    const nextState = !shop.is_open;
+    const updated = await dbService.toggleShopOpenStatus(shop.id, nextState);
     if (updated) setShop(updated);
+    success(nextState ? '🟢 Quán đã MỞ CỬA đón khách!' : '🔴 Quán đã ĐÓNG CỬA tạm thời!');
   };
 
   const toggleIsAccepting = async () => {
     if (!shop) return;
-    const updated = await dbService.updateShopProfile(shop.id, { is_accepting_orders: !shop.is_accepting_orders });
+    const nextState = !shop.is_accepting_orders;
+    const updated = await dbService.toggleShopAcceptingOrders(shop.id, nextState);
     if (updated) setShop(updated);
+    success(nextState ? '🟢 Đã BẬT nhận đơn hàng mới!' : '⏸️ Đã TẠM NGỪNG nhận đơn hàng!');
   };
 
   const menuGroups: MenuGroup[] = [

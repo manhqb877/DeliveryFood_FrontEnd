@@ -5,12 +5,36 @@ import { CardGridItem } from '@/components/ui/Card';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
+import { ImageUploadPicker } from '@/components/ui/ImageUploadPicker';
+import { MultiImageUploadPicker } from '@/components/ui/MultiImageUploadPicker';
+import { useToast } from '@/components/ui/Toast';
 import { Plus, Edit2, Clock, DollarSign, ListPlus, Star, ShieldCheck, Trash2, Flame, Leaf, Heart, ImagePlus, SortAsc, Zap } from 'lucide-react';
 
 export function MenuItemsPage() {
-  const [items, setItems] = useState<Item[]>(() => (dbService as any).getCachedItems?.() || []);
-  const [categories, setCategories] = useState<Category[]>(() => (dbService as any).getCachedCategories?.() || []);
-  const [loading, setLoading] = useState(() => !((dbService as any).getCachedItems?.()?.length));
+  const { success, error, warning } = useToast();
+
+  // Instant cache load (0ms load time)
+  const [items, setItems] = useState<Item[]>(() => {
+    try {
+      const stored = localStorage.getItem('hyperlocal_cached_items');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) {}
+    return (dbService as any).getCachedItems?.() || [];
+  });
+  const [categories, setCategories] = useState<Category[]>(() => {
+    try {
+      const stored = localStorage.getItem('hyperlocal_cached_categories');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) {}
+    return (dbService as any).getCachedCategories?.() || [];
+  });
+  const [loading, setLoading] = useState(false);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -56,18 +80,24 @@ export function MenuItemsPage() {
   const [suggestedOptions, setSuggestedOptions] = useState<any[]>([]);
   const [selectedToppings, setSelectedToppings] = useState<any[]>([]);
 
-  const loadData = async (showLoading = false) => {
-    if (showLoading || items.length === 0) setLoading(true);
+  const loadData = async (showLoading = false, forceRefresh = false) => {
+    if (showLoading && items.length === 0) setLoading(true);
     try {
-      const myShop = await dbService.getMyShop();
-      const currentShopId = myShop?.id || 1;
+      const currentShopId = (dbService as any).getCurrentShopIdSync?.() || 1;
       const [iList, cList] = await Promise.all([
-        dbService.getItems(currentShopId),
-        dbService.getCategories(currentShopId),
+        dbService.getItems(currentShopId, forceRefresh),
+        dbService.getCategories(currentShopId, forceRefresh),
       ]);
-      iList.sort((a: any, b: any) => (b.id || 0) - (a.id || 0));
-      setItems(iList);
-      setCategories(cList);
+      if (iList && iList.length > 0) {
+        iList.sort((a: any, b: any) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        setItems(iList);
+        try { localStorage.setItem('hyperlocal_cached_items', JSON.stringify(iList)); } catch (_) {}
+      }
+      if (cList && cList.length > 0) {
+        cList.sort((a: any, b: any) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        setCategories(cList);
+        try { localStorage.setItem('hyperlocal_cached_categories', JSON.stringify(cList)); } catch (_) {}
+      }
     } catch (e) {
       console.error('Error loading menu items:', e);
     } finally {
@@ -76,7 +106,7 @@ export function MenuItemsPage() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false, true);
   }, []);
 
   useEffect(() => {
@@ -84,21 +114,25 @@ export function MenuItemsPage() {
   }, [search, categoryFilter, statusFilter]);
 
   const handleQuickToggleSoldOut = async (item: Item) => {
-    const nextStatus = item.status === 'AVAILABLE' ? 'SOLD_OUT' : 'AVAILABLE';
+    const nextStatus: Item['status'] = item.status === 'AVAILABLE' ? 'SOLD_OUT' : 'AVAILABLE';
     // Optimistic UI update
-    setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: nextStatus } : i));
+    setItems((prev) => {
+      const updated = prev.map((i) => (i.id === item.id ? { ...i, status: nextStatus } : i));
+      try { localStorage.setItem('hyperlocal_cached_items', JSON.stringify(updated)); } catch (_) {}
+      return updated;
+    });
+    success(nextStatus === 'AVAILABLE' ? `🟢 Đã mở bán lại món "${item.name}"!` : `🔴 Đã báo hết món "${item.name}"!`);
     try {
       await dbService.saveItem({ ...item, status: nextStatus });
+      loadData(false, true);
     } catch (e) {
       console.error(e);
-      loadData(false);
+      loadData(false, true);
     }
   };
 
-  
   const handleAddItem = async () => {
-    const myShop = await dbService.getMyShop();
-    const currentShopId = myShop?.id || 1;
+    const currentShopId = (dbService as any).getCurrentShopIdSync?.() || 1;
     
     setEditingItem({
       shop_id: currentShopId,
@@ -116,7 +150,6 @@ export function MenuItemsPage() {
     setIsItemModalOpen(true);
   };
 
-  
   const handleCategoryChange = async (categoryId: number) => {
     setEditingItem((prev) => ({ ...prev, category_id: categoryId }));
     const suggested = await (dbService as any).getSuggestedOptionsByCategory?.(categoryId) || [];
@@ -134,22 +167,22 @@ export function MenuItemsPage() {
   };
 
   const handleSaveItem = async () => {
-    if (!editingItem.name || !editingItem.base_price) {
-      alert('Vui lòng nhập tên món và giá gốc!');
+    if (!editingItem.name?.trim() || !editingItem.base_price) {
+      error('Vui lòng nhập tên món và giá gốc!');
       return;
     }
     
     // Check discount_price must be less than base_price
     if (editingItem.discount_price !== undefined && editingItem.discount_price !== null && Number(editingItem.discount_price) > 0) {
       if (Number(editingItem.discount_price) >= Number(editingItem.base_price)) {
-        alert(`⚠️ Lỗi kiểm tra giá: Giá sau giảm (${Number(editingItem.discount_price).toLocaleString('vi-VN')}₫) phải nhỏ hơn giá cơ bản (${Number(editingItem.base_price).toLocaleString('vi-VN')}₫)! Vui lòng kiểm tra lại.`);
+        error(`⚠️ Giá sau giảm (${Number(editingItem.discount_price).toLocaleString('vi-VN')}₫) phải nhỏ hơn giá cơ bản (${Number(editingItem.base_price).toLocaleString('vi-VN')}₫)!`);
         return;
       }
     }
 
+    const isUpdate = !!editingItem.id;
     try {
-      const myShop = await dbService.getMyShop();
-      const currentShopId = myShop?.id || 1;
+      const currentShopId = (dbService as any).getCurrentShopIdSync?.() || 1;
       const cat = categories.find((c) => c.id === editingItem.category_id);
       
       // Close modal immediately for snappy feeling
@@ -161,8 +194,46 @@ export function MenuItemsPage() {
         category_name: cat?.name || 'Món ăn',
       });
       
+      const finalItemId = editingItem.id || (Array.isArray(savedItem) ? savedItem[0]?.id : (savedItem as any)?.id) || Date.now();
+      
+      const finalItemObj: Item = {
+        ...editingItem,
+        id: finalItemId,
+        shop_id: currentShopId,
+        category_id: editingItem.category_id || categories[0]?.id || 1,
+        category_name: cat?.name || 'Món ăn',
+        name: editingItem.name.trim(),
+        description: editingItem.description || '',
+        base_price: Number(editingItem.base_price),
+        discount_price: editingItem.discount_price ? Number(editingItem.discount_price) : undefined,
+        image_url: editingItem.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300',
+        status: editingItem.status || 'AVAILABLE',
+        daily_limit: editingItem.daily_limit,
+        daily_sold: editingItem.daily_sold || 0,
+        prep_time_minutes: editingItem.prep_time_minutes || 10,
+        tags: editingItem.tags || [],
+        sort_order: editingItem.sort_order || 0,
+      } as Item;
+
+      // Optimistic update: đưa mục mới lên ĐẦU TIÊN (vị trí #1)
+      if (isUpdate) {
+        setItems((prev) => {
+          const updated = prev.map((it) => (it.id === finalItemObj.id ? finalItemObj : it));
+          try { localStorage.setItem('hyperlocal_cached_items', JSON.stringify(updated)); } catch (_) {}
+          return updated;
+        });
+        success(`Cập nhật món "${finalItemObj.name}" thành công!`);
+      } else {
+        setItems((prev) => {
+          const updated = [finalItemObj, ...prev.filter((it) => it.id !== finalItemObj.id)];
+          try { localStorage.setItem('hyperlocal_cached_items', JSON.stringify(updated)); } catch (_) {}
+          return updated;
+        });
+        setCurrentPage(1); // Chuyển về trang 1 ngay lập tức để nhìn thấy món mới!
+        success(`Đã thêm món mới "${finalItemObj.name}" vào đầu danh sách!`);
+      }
+
       // Concurrently save toppings in parallel
-      const finalItemId = editingItem.id || (Array.isArray(savedItem) ? savedItem[0]?.id : (savedItem as any)?.id);
       if (finalItemId) {
         const toAdd = selectedToppings.filter(st => !itemOptions.some(io => io.group_name === st.group_name && io.option_name === st.option_name));
         const toRemove = itemOptions.filter(io => !selectedToppings.some(st => st.group_name === io.group_name && st.option_name === io.option_name));
@@ -174,11 +245,11 @@ export function MenuItemsPage() {
         await Promise.all(toppingPromises);
       }
 
-      await loadData(false);
+      loadData(false, true);
     } catch (e: any) {
       console.error(e);
-      alert(`Lỗi khi lưu món ăn: ${e?.message || 'Vui lòng thử lại.'}`);
-      await loadData(false);
+      error(`Lỗi khi lưu món ăn: ${e?.message || 'Vui lòng thử lại.'}`);
+      loadData(false, true);
     }
   };
 
@@ -191,7 +262,7 @@ export function MenuItemsPage() {
 
   const handleSavePriceRule = async () => {
     if (!pricingItem || !newPrice.price_name || !newPrice.price) {
-      alert('Vui lòng nhập tên và giá áp dụng!');
+      error('Vui lòng nhập tên và giá áp dụng!');
       return;
     }
 
@@ -199,34 +270,41 @@ export function MenuItemsPage() {
     const type = newPrice.price_type;
     if (['PEAK_HOUR', 'OFF_PEAK', 'HAPPY_HOUR', 'EARLY_BIRD', 'LATE_NIGHT'].includes(type || '')) {
       if (!newPrice.time_start || !newPrice.time_end) {
-        alert(`Loại giá ${type} bắt buộc phải chọn Giờ Bắt Đầu và Giờ Kết Thúc!`);
+        error(`Loại giá ${type} bắt buộc phải chọn Giờ Bắt Đầu và Giờ Kết Thúc!`);
         return;
       }
     } else if (type === 'SEASONAL') {
       if (!newPrice.valid_from || !newPrice.valid_until) {
-        alert('Loại giá SEASONAL (Theo mùa) bắt buộc phải nhập Ngày Bắt Đầu & Kết Thúc!');
+        error('Loại giá SEASONAL (Theo mùa) bắt buộc phải nhập Ngày Bắt Đầu & Kết Thúc!');
         return;
       }
     }
 
     await dbService.saveItemPrice({ ...newPrice, item_id: pricingItem.id });
-    alert('Đã lưu quy tắc giá thành công!');
+    success('Đã lưu quy tắc giá thành công!');
     setIsAddPriceModalOpen(false);
     const prices = await dbService.getItemPrices(pricingItem.id);
     setItemPrices(prices);
   };
 
   const handleDeleteItem = async (id: number) => {
-    if (confirm("Bạn có chắc chắn muốn xoá món ăn này không?")) {
+    const targetItem = items.find(i => i.id === id);
+    if (confirm(`Bạn có chắc chắn muốn xoá món "${targetItem?.name || ''}" không?`)) {
       const prevItems = [...items];
       // Optimistic delete - disappears instantly
-      setItems(prev => prev.filter(i => i.id !== id));
+      setItems(prev => {
+        const updated = prev.filter(i => i.id !== id);
+        try { localStorage.setItem('hyperlocal_cached_items', JSON.stringify(updated)); } catch (_) {}
+        return updated;
+      });
       try {
         await dbService.deleteItem(id);
+        success(`Đã xoá món "${targetItem?.name || ''}" thành công!`);
+        loadData(false, true);
       } catch (e) {
         console.error(e);
         setItems(prevItems);
-        alert("Lỗi khi xoá món ăn. Vui lòng thử lại!");
+        error("Lỗi khi xoá món ăn. Vui lòng thử lại!");
       }
     }
   };
@@ -234,6 +312,7 @@ export function MenuItemsPage() {
   const handleDeletePriceRule = async (id: number) => {
     if (!pricingItem) return;
     await dbService.deleteItemPrice(id);
+    success('Đã xoá quy tắc giá!');
     const prices = await dbService.getItemPrices(pricingItem.id);
     setItemPrices(prices);
   };
@@ -249,11 +328,11 @@ export function MenuItemsPage() {
 
   const handleSaveOptionRule = async () => {
     if (!optionsItem || !newOpt.group_name || !newOpt.option_name) {
-      alert('Vui lòng nhập tên nhóm và tên tuỳ chọn!');
+      error('Vui lòng nhập tên nhóm và tên tuỳ chọn!');
       return;
     }
     await dbService.saveItemOption({ ...newOpt, item_id: optionsItem.id });
-    alert('Đã lưu tuỳ chọn thành công!');
+    success('Đã lưu tuỳ chọn Topping thành công!');
     setIsAddOptModalOpen(false);
     const opts = await dbService.getItemOptions(optionsItem.id);
     setItemOptions(opts);
@@ -262,6 +341,7 @@ export function MenuItemsPage() {
   const handleDeleteOptionRule = async (id: number) => {
     if (!optionsItem) return;
     await dbService.deleteItemOption(id);
+    success('Đã xoá tuỳ chọn Topping!');
     const opts = await dbService.getItemOptions(optionsItem.id);
     setItemOptions(opts);
   };
@@ -274,10 +354,12 @@ export function MenuItemsPage() {
     return matchSearch && matchCat && matchStat;
   });
 
+  // Ưu tiên món mới thêm nhất lên đầu danh sách (ID giảm dần)
+  const sortedFilteredItems = [...filteredItems].sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const paginatedItems = filteredItems.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const paginatedItems = sortedFilteredItems.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(sortedFilteredItems.length / itemsPerPage) || 1;
 
   return (
     <div className="space-y-6">
@@ -335,19 +417,30 @@ export function MenuItemsPage() {
       />
 
       {/* Card Grid view */}
-      {loading ? (
-        <div className="text-center py-12 text-slate-400 text-xs">Đang tải danh sách món ăn...</div>
+      {loading && items.length === 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+          {[1, 2, 3, 4, 5, 6].map((n) => (
+            <div key={n} className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm animate-pulse">
+              <div className="h-44 bg-slate-200" />
+              <div className="p-4 space-y-3">
+                <div className="h-4 bg-slate-200 rounded w-1/3" />
+                <div className="h-5 bg-slate-200 rounded w-2/3" />
+                <div className="h-3 bg-slate-200 rounded w-full" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : filteredItems.length === 0 ? (
         <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500 text-xs">
           Không tìm thấy món ăn nào thỏa điều kiện lọc.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {paginatedItems.map((item) => (
+          {paginatedItems.map((item, idx) => (
             <div key={item.id} className="relative group">
               <CardGridItem
                 image={item.image_url}
-                categoryOverlay={item.category_name}
+                categoryOverlay={`Vị trí: #${indexOfFirstItem + idx + 1} • ${item.category_name || 'Món ăn'}`}
                 statusText={item.status}
                 subBadge={`Giá: ${item.base_price.toLocaleString()} ₫ ${item.is_signature ? '• ⭐ Signature' : ''} ${item.is_vegetarian ? '• 🥬 Chay' : ''}`}
                 title={item.name}
@@ -611,44 +704,28 @@ export function MenuItemsPage() {
             </div>
           </div>
 
-          {/* Nhóm 4: Hình ảnh món */}
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
+          {/* Nhóm 4: Hình ảnh món (Chọn từ thư mục & lưu CSDL) */}
+          <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-4">
             <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
               <ImagePlus className="w-3.5 h-3.5 text-purple-600" />
-              Hình ảnh món ăn
+              Hình ảnh món ăn (Chọn từ thư mục máy tính)
             </h4>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">URL Hình ảnh chính (Cover Image):</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={editingItem.image_url || ''}
-                  onChange={(e) => setEditingItem((prev) => ({ ...prev, image_url: e.target.value }))}
-                  placeholder="https://images.unsplash.com/..."
-                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
-                />
-                {editingItem.image_url && (
-                  <img
-                    src={editingItem.image_url}
-                    alt="Preview"
-                    className="w-10 h-10 rounded-lg object-cover border border-slate-300"
-                  />
-                )}
-              </div>
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">URL Ảnh phụ / Chi tiết (mỗi dòng 1 URL):</label>
-              <textarea
-                rows={2}
-                value={(editingItem.extra_image_urls || []).join('\n')}
-                onChange={(e) =>
-                  setEditingItem((prev) => ({
-                    ...prev,
-                    extra_image_urls: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
-                  }))
-                }
-                placeholder="https://images.unsplash.com/...&#10;https://images.unsplash.com/..."
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white font-mono"
+            
+            {/* Ảnh chính (Cover Image) */}
+            <ImageUploadPicker
+              label="Hình ảnh chính (Cover Image)"
+              helperText="Chọn ảnh từ máy tính (ảnh được nén & lưu trực tiếp vào CSDL Neon Postgres)"
+              value={editingItem.image_url || ''}
+              onChange={(val) => setEditingItem((prev) => ({ ...prev, image_url: val }))}
+            />
+
+            {/* Ảnh phụ / Chi tiết */}
+            <div className="pt-2 border-t border-slate-200/80">
+              <MultiImageUploadPicker
+                label="Ảnh phụ / Góc chụp chi tiết"
+                values={editingItem.extra_image_urls || []}
+                onChange={(urls) => setEditingItem((prev) => ({ ...prev, extra_image_urls: urls }))}
+                maxImages={6}
               />
             </div>
           </div>

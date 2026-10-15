@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
+import { useLanguage } from '@/context/LanguageContext';
 import { TrashIcon, ShoppingCartIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import ProductModal from '@/components/menu/ProductModal';
@@ -11,14 +12,40 @@ const API = 'http://localhost:8080/api/v1';
 
 export default function CartPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const { carts, totalAmount, loading, updateCartItem, removeCartItem, clearCart } = useCart();
   const [removingId, setRemovingId] = useState(null);
+  const [checkingShop, setCheckingShop] = useState(false);
 
   // Edit Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingCartItem, setEditingCartItem] = useState(null);
   const [editingProductDetail, setEditingProductDetail] = useState(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
+
+  const handleProceedToCheckout = async () => {
+    const activeCart = carts.find(c => c.items?.length > 0);
+    if (!activeCart) return;
+
+    setCheckingShop(true);
+    try {
+      const res = await fetch(`${API}/core/shops/${activeCart.shopId}/details`);
+      if (res.ok) {
+        const shop = await res.json();
+        if (shop?.isOpen === false || shop?.isAcceptingOrders === false) {
+          alert(`⛔ Quán "${shop.shopName || ('#' + activeCart.shopId)}" hiện đang đóng cửa hoặc tạm ngừng nhận đơn hàng!\n\nQuý khách vui lòng chọn món từ quán khác hoặc quay lại khi quán mở cửa nhé!`);
+          setCheckingShop(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not check shop status before checkout:", e);
+    } finally {
+      setCheckingShop(false);
+    }
+
+    router.push('/checkout');
+  };
 
   const handleRemove = async (cartItemId) => {
     setRemovingId(cartItemId);
@@ -29,7 +56,7 @@ export default function CartPage() {
   const handleQuantityChange = async (item, delta) => {
     const newQty = item.quantity + delta;
     if (newQty <= 0) {
-      if (confirm('Xóa món này khỏi giỏ hàng?')) await removeCartItem(item.id);
+      if (confirm(t('cart_confirm_remove', 'Xóa món này khỏi giỏ hàng?'))) await removeCartItem(item.id);
     } else {
       await updateCartItem(item.id, { quantity: newQty });
     }
@@ -72,10 +99,12 @@ export default function CartPage() {
         {/* Header */}
         <div className="flex items-center gap-3 mb-10 border-b border-gray-200 pb-6">
           <ShoppingCartIcon className="w-8 h-8 text-[var(--color-primary-dark)]" />
-          <h1 className="text-[32px] font-extrabold text-[#333]">Giỏ hàng</h1>
+          <h1 className="text-[32px] font-extrabold text-[#333]" suppressHydrationWarning>
+            {t('cart_title', 'Giỏ hàng')}
+          </h1>
           {totalItems > 0 && (
-            <span className="bg-[var(--color-primary)] text-black text-sm font-bold px-4 py-1 rounded-full ml-2 shadow-sm border border-yellow-300">
-              {totalItems} món
+            <span className="bg-[var(--color-primary)] text-black text-sm font-bold px-4 py-1 rounded-full ml-2 shadow-sm border border-yellow-300" suppressHydrationWarning>
+              {totalItems} {t('cart_items_count', 'món')}
             </span>
           )}
         </div>
@@ -83,7 +112,6 @@ export default function CartPage() {
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-40 h-40 mb-6 relative">
-              {/* Empty state SVG using primary color */}
               <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-[var(--color-primary-dark)]">
                 <path d="M40 80 L160 80 L140 180 L60 180 Z" stroke="currentColor" strokeWidth="6" strokeLinejoin="round" fill="white"/>
                 <path d="M70 80 C70 40, 130 40, 130 80" stroke="currentColor" strokeWidth="6" strokeLinecap="round" fill="none"/>
@@ -98,10 +126,14 @@ export default function CartPage() {
                 <line x1="160" y1="140" x2="175" y2="140" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
               </svg>
             </div>
-            <h2 className="text-[22px] font-bold text-[#333] mb-3">“Hổng” có gì trong giỏ hết</h2>
-            <p className="text-gray-500 mb-8 text-sm">Về trang cửa hàng để chọn đặt hàng ngay bạn nhé!!</p>
-            <Link href="/" className="px-10 py-3 bg-[var(--color-primary)] text-black font-bold rounded-full shadow-sm hover:bg-[var(--color-primary-dark)] transition-colors">
-              Đặt hàng ngay
+            <h2 className="text-[22px] font-bold text-[#333] mb-3" suppressHydrationWarning>
+              {t('cart_empty_title', '“Hổng” có gì trong giỏ hết')}
+            </h2>
+            <p className="text-gray-500 mb-8 text-sm" suppressHydrationWarning>
+              {t('cart_empty_desc', 'Về trang cửa hàng để chọn đặt hàng ngay bạn nhé!!')}
+            </p>
+            <Link href="/" className="px-10 py-3 bg-[var(--color-primary)] text-black font-black rounded-full shadow-sm hover:bg-[var(--color-primary-dark)] transition-colors" suppressHydrationWarning>
+              {t('cart_order_now', 'Đặt hàng ngay')}
             </Link>
           </div>
         ) : (
@@ -111,15 +143,24 @@ export default function CartPage() {
               {carts.filter(c => c.items?.length > 0).map(cart => (
                 <div key={cart.id} className="mb-10">
                   <div className="flex items-center justify-between border-b border-gray-200 pb-3 mb-4">
-                    <h3 className="font-bold text-gray-800 text-lg">Quán #{cart.shopId} <span className="text-sm text-gray-400 font-normal ml-2">({cart.items?.length} loại)</span></h3>
-                    <button onClick={() => { if (confirm('Xóa toàn bộ giỏ hàng này?')) clearCart(cart.id); }} className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1 transition"><TrashIcon className="w-4 h-4" />Xóa tất cả</button>
+                    <h3 className="font-bold text-gray-800 text-lg" suppressHydrationWarning>
+                      {t('cart_shop_label', 'Quán')} #{cart.shopId} <span className="text-sm text-gray-400 font-normal ml-2">({cart.items?.length} {t('cart_types', 'loại')})</span>
+                    </h3>
+                    <button 
+                      onClick={() => { if (confirm(t('cart_confirm_clear', 'Xóa toàn bộ giỏ hàng này?'))) clearCart(cart.id); }} 
+                      className="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1 transition cursor-pointer"
+                      suppressHydrationWarning
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                      {t('cart_clear_all', 'Xóa tất cả')}
+                    </button>
                   </div>
 
                   <div className="flex flex-col gap-6">
                     {cart.items?.map(item => (
                       <div key={item.id} className={`flex items-center gap-6 pb-6 border-b border-gray-100 transition-opacity ${removingId === item.id ? 'opacity-40' : ''}`}>
                         {/* Remove button */}
-                        <button onClick={() => handleRemove(item.id)} className="text-gray-400 hover:text-red-500 transition px-2">
+                        <button onClick={() => handleRemove(item.id)} className="text-gray-400 hover:text-red-500 transition px-2 cursor-pointer">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
 
@@ -131,8 +172,8 @@ export default function CartPage() {
                         {/* Info */}
                         <div className="flex-1 min-w-0">
                           <h4 className="font-bold text-[#333] text-[16px]">{item.itemName}</h4>
-                          <div className="text-[13px] text-gray-500 mt-1 line-clamp-1">
-                            {item.selectedOptions?.length > 0 ? item.selectedOptions.map(o => `${o.group}: ${o.option}`).join(' · ') : 'Tùy chọn: Bình thường'}
+                          <div className="text-[13px] text-gray-500 mt-1 line-clamp-1" suppressHydrationWarning>
+                            {item.selectedOptions?.length > 0 ? item.selectedOptions.map(o => `${o.group}: ${o.option}`).join(' · ') : t('cart_options_default', 'Tùy chọn: Mặc định')}
                           </div>
                           {item.itemNote && (
                             <div className="text-[13px] text-amber-600 mt-1 italic">
@@ -140,9 +181,9 @@ export default function CartPage() {
                             </div>
                           )}
                           <div className="flex items-center gap-4 mt-2">
-                            <button onClick={() => handleOpenEdit(item)} disabled={loadingEdit === item.id} className="text-[13px] text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1">
+                            <button onClick={() => handleOpenEdit(item)} disabled={loadingEdit === item.id} className="text-[13px] text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1 cursor-pointer">
                               {loadingEdit === item.id ? <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /> : <PencilSquareIcon className="w-4 h-4" />}
-                              Sửa
+                              <span suppressHydrationWarning>{t('cart_edit', 'Sửa')}</span>
                             </button>
                           </div>
                         </div>
@@ -155,9 +196,9 @@ export default function CartPage() {
 
                         {/* Quantity */}
                         <div className="flex items-center border border-gray-200 rounded-full h-10 w-28 shrink-0">
-                          <button className="flex-1 h-full flex items-center justify-center text-gray-500 hover:text-black font-bold transition rounded-l-full" onClick={() => handleQuantityChange(item, -1)}>−</button>
+                          <button className="flex-1 h-full flex items-center justify-center text-gray-500 hover:text-black font-bold transition rounded-l-full cursor-pointer" onClick={() => handleQuantityChange(item, -1)}>−</button>
                           <span className="w-8 text-center font-bold text-[#333]">{item.quantity}</span>
-                          <button className="flex-1 h-full flex items-center justify-center text-gray-500 hover:text-black font-bold transition rounded-r-full" onClick={() => handleQuantityChange(item, 1)}>+</button>
+                          <button className="flex-1 h-full flex items-center justify-center text-gray-500 hover:text-black font-bold transition rounded-r-full cursor-pointer" onClick={() => handleQuantityChange(item, 1)}>+</button>
                         </div>
                       </div>
                     ))}
@@ -168,19 +209,31 @@ export default function CartPage() {
 
             {/* Right: Summary */}
             <div className="w-full lg:w-[450px]">
-              <div className="border border-gray-200 rounded-sm p-6 md:p-8 bg-[#fafafa]">
-                <h2 className="text-xl font-bold text-[#333] mb-6 pb-4 border-b border-gray-200">Tóm tắt đơn hàng</h2>
+              <div className="border border-gray-200 rounded-2xl p-6 md:p-8 bg-[#fafafa] shadow-xs">
+                <h2 className="text-xl font-bold text-[#333] mb-6 pb-4 border-b border-gray-200" suppressHydrationWarning>
+                  {t('cart_title', 'Giỏ hàng')}
+                </h2>
                 
                 <div className="flex justify-between items-center mb-6">
-                  <span className="font-bold text-[#333] text-lg">Tổng cộng</span>
-                  <span className="text-2xl font-bold text-[#0089cf]">{Number(totalAmount).toLocaleString('vi-VN')} đ</span>
+                  <span className="font-bold text-[#333] text-lg" suppressHydrationWarning>
+                    {t('cart_subtotal', 'Tổng tiền')}
+                  </span>
+                  <span className="text-2xl font-black text-red-600">
+                    {Number(totalAmount).toLocaleString('vi-VN')} đ
+                  </span>
                 </div>
 
                 <button 
-                  onClick={() => router.push('/checkout')}
-                  className="w-full h-12 bg-[#337ab7] text-white rounded-sm font-medium hover:bg-[#286090] transition-colors text-[15px] uppercase flex items-center justify-center gap-2"
+                  onClick={handleProceedToCheckout}
+                  disabled={checkingShop}
+                  className="w-full h-12 bg-[var(--color-primary)] text-black rounded-xl font-black hover:bg-[var(--color-primary-dark)] transition-colors text-[15px] uppercase flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-60"
+                  suppressHydrationWarning
                 >
-                  Thanh toán
+                  {checkingShop ? (
+                    <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    t('cart_checkout_btn', 'Tiến hành đặt hàng')
+                  )}
                 </button>
               </div>
             </div>

@@ -6,24 +6,97 @@ const LanguageContext = createContext();
 
 export const translations = {
   vi: {
-    // Navigation & Header
+    // Navigation & Main Header
     nav_home: 'Trang chủ',
+    nav_about: 'VỀ BEFOOD',
+    nav_careers: 'NGHỀ NGHIỆP',
+    nav_support: 'HỖ TRỢ',
+    nav_news: 'TIN TỨC',
+    nav_stores: 'CỬA HÀNG',
+    nav_order_now: 'ĐẶT HÀNG',
     nav_categories: 'Danh mục sản phẩm',
     nav_policy: 'Chính sách đặt hàng',
-    nav_support: 'Hỗ trợ',
     nav_contact: 'Liên hệ',
-    header_delivery: 'Giao tận nơi',
+    header_delivery: 'GIAO TẬN NƠI',
     header_account: 'Tài khoản',
     header_login: 'Đăng nhập',
     header_register: 'Đăng ký',
     header_logout: 'Đăng xuất',
-    header_profile: 'Hồ sơ cá nhân',
+    header_profile: 'Tài khoản của tôi',
     header_my_orders: 'Đơn hàng của tôi',
     header_track_order: 'Tra cứu đơn',
     header_cart: 'Giỏ hàng',
-    header_search_placeholder: 'Tìm kiếm theo món ăn, quán ăn...',
+    header_search_placeholder: 'Tìm kiếm món ăn, quán ăn...',
     header_notifications: 'Thông báo',
-    
+    role_customer: 'Khách hàng',
+    role_shop_manager: 'Chủ quán',
+    role_shipper: 'Tài xế',
+    search_results_for: 'Kết quả tìm kiếm cho',
+    search_show_by: 'Hiển thị kết quả theo:',
+    search_products: 'Sản phẩm',
+    search_no_results: 'Không tìm thấy sản phẩm nào',
+    search_see_more: 'Xem thêm sản phẩm có chứa',
+    search_searching: 'Đang tìm kiếm...',
+
+    // Home Page
+    home_address_box_title: 'Địa chỉ bạn muốn giao món',
+    home_address_placeholder: 'Nhập địa chỉ giao hàng',
+    home_clear_address: 'Xóa địa chỉ',
+    home_current_location: 'Vị trí hiện tại',
+    home_searching_address: 'Đang tìm địa chỉ...',
+    home_not_found_address: 'Không tìm thấy địa chỉ',
+    home_near_you: 'Gần bạn',
+    home_featured: 'Nổi bật',
+    home_view_all: 'Xem tất cả',
+    home_view_more: 'Xem thêm',
+    home_shops_near_you: 'Quán ngon gần bạn',
+    home_shops_featured: 'Quán ngon nổi bật',
+    home_open: 'Mở cửa',
+    home_order_action: 'Đặt món',
+    home_direct_delivery: 'Giao tận nơi',
+    home_minutes: 'phút',
+    home_no_shops: 'Chưa có gian hàng nào trong khu vực',
+    home_rewards_badge: 'BE MEMBER REWARDS',
+    home_rewards_title: 'Dành riêng cho\nThành viên beFood',
+    home_rewards_desc: 'Đăng ký thành viên để nhận ngay hàng ngàn ưu đãi giảm giá, mã freeship và tích điểm đổi quà hấp dẫn mỗi ngày!',
+    home_rewards_btn: 'ĐẶT MÓN & TÍCH ĐIỂM NGAY',
+    home_companion_badge: 'ƯU ĐÃI NỔI BẬT',
+    home_companion_title: 'Luôn đồng hành cùng bạn',
+    home_fast_30m: 'Giao nhanh 30 phút',
+    home_order_now_caps: 'ĐẶT HÀNG NGAY',
+    home_care_247: 'beFood Care 24/7',
+    home_support_caps: 'HỖ TRỢ KHÁCH HÀNG',
+    home_news_daily: 'Cập nhật liên tục',
+    home_news_caps: 'TIN TỨC MỖI NGÀY',
+    home_network_badge: 'MẠNG LƯỚI QUÁN ĂN TOÀN QUỐC',
+    home_network_title: 'Mạng lưới cửa hàng beFood',
+    home_network_desc: 'Hàng ngàn quán ăn, nhà hàng yêu thích và tài xế beFood luôn sẵn sàng phục vụ món ngon tận tay bạn nhanh chóng!',
+    home_explore_shops: 'KHÁM PHÁ CỬA HÀNG',
+
+    // Order Page (/order)
+    order_shop_list_title: 'Danh sách Quán',
+    order_chat_with_shop: 'Nhắn tin cho Quán',
+    order_error_title: 'Lỗi tải dữ liệu quán',
+    order_not_found: 'Không tìm thấy thông tin quán.',
+    order_empty_shops: 'Hệ thống chưa có quán nào.',
+    order_loading: 'Đang tải...',
+
+    // Cart Page (/cart)
+    cart_title: 'Giỏ hàng',
+    cart_items_count: 'món',
+    cart_empty_title: '“Hổng” có gì trong giỏ hết',
+    cart_empty_desc: 'Về trang cửa hàng để chọn đặt hàng ngay bạn nhé!!',
+    cart_order_now: 'Đặt hàng ngay',
+    cart_clear_all: 'Xóa tất cả',
+    cart_shop_label: 'Quán',
+    cart_types: 'loại',
+    cart_options_default: 'Tùy chọn: Mặc định',
+    cart_edit: 'Sửa',
+    cart_subtotal: 'Tổng tiền',
+    cart_checkout_btn: 'Tiến hành đặt hàng',
+    cart_confirm_remove: 'Xóa món này khỏi giỏ hàng?',
+    cart_confirm_clear: 'Xóa toàn bộ giỏ hàng này?',
+
     // Auth & Login
     auth_login_title: 'Đăng nhập tài khoản',
     auth_register_title: 'Đăng ký tài khoản',
@@ -99,23 +172,41 @@ export const translations = {
     contact_map_open: 'Mở trong Maps',
 
     // Footer
-    footer_about_title: 'Về beFood',
+    footer_about_title: 'VỀ BEFOOD',
+    footer_menu: 'Thực đơn',
+    footer_promotions: 'Khuyến mãi',
+    footer_careers: 'Nghề nghiệp',
+    footer_support_link: 'Hỗ trợ khách hàng',
+    footer_stores_title: 'CỬA HÀNG',
+    footer_find_stores: 'Tìm kiếm cửa hàng',
+    footer_track_orders: 'Tra cứu đơn hàng',
+    footer_news_title: 'TIN TỨC',
+    footer_latest_news: 'Tin tức mới nhất',
+    footer_blog: 'Blog',
+    footer_socials_title: 'MẠNG XÃ HỘI',
     footer_about_desc: 'Ứng dụng đặt đồ ăn trực tuyến hàng đầu, giao hàng nhanh chóng, hương vị tuyệt hảo tận tay.',
     footer_policies: 'Chính sách',
     footer_support: 'Hỗ trợ',
     footer_newsletter: 'Đăng ký nhận tin',
     footer_newsletter_desc: 'Nhận ngay các ưu đãi giảm giá và voucher hấp dẫn hàng tuần.',
+    footer_email_placeholder: 'Nhập email của bạn...',
     footer_rights: 'Bản quyền thuộc về beFood - Be Group © 2026. Mọi quyền được bảo lưu.',
+    footer_secure: '100% An toàn & Bảo mật',
   },
 
   en: {
-    // Navigation & Header
+    // Navigation & Main Header
     nav_home: 'Home',
-    nav_categories: 'Categories',
+    nav_about: 'ABOUT BEFOOD',
+    nav_careers: 'CAREERS',
+    nav_support: 'SUPPORT',
+    nav_news: 'NEWS',
+    nav_stores: 'STORES',
+    nav_order_now: 'ORDER NOW',
+    nav_categories: 'Product Categories',
     nav_policy: 'Order Policy',
-    nav_support: 'Support',
     nav_contact: 'Contact',
-    header_delivery: 'Direct Delivery',
+    header_delivery: 'DIRECT DELIVERY',
     header_account: 'Account',
     header_login: 'Log In',
     header_register: 'Sign Up',
@@ -126,6 +217,74 @@ export const translations = {
     header_cart: 'Cart',
     header_search_placeholder: 'Search for dishes, restaurants...',
     header_notifications: 'Notifications',
+    role_customer: 'Customer',
+    role_shop_manager: 'Store Owner',
+    role_shipper: 'Rider',
+    search_results_for: 'Search results for',
+    search_show_by: 'Show results by:',
+    search_products: 'Products',
+    search_no_results: 'No products found',
+    search_see_more: 'See more products matching',
+    search_searching: 'Searching...',
+
+    // Home Page
+    home_address_box_title: 'Where do you want food delivered?',
+    home_address_placeholder: 'Enter delivery address',
+    home_clear_address: 'Clear address',
+    home_current_location: 'Current location',
+    home_searching_address: 'Finding address...',
+    home_not_found_address: 'Address not found',
+    home_near_you: 'Near You',
+    home_featured: 'Featured',
+    home_view_all: 'View All',
+    home_view_more: 'View more',
+    home_shops_near_you: 'Restaurants near you',
+    home_shops_featured: 'Featured restaurants',
+    home_open: 'Open',
+    home_order_action: 'Order Now',
+    home_direct_delivery: 'Direct Delivery',
+    home_minutes: 'mins',
+    home_no_shops: 'No restaurants available in this area yet',
+    home_rewards_badge: 'BE MEMBER REWARDS',
+    home_rewards_title: 'Exclusive for\nbeFood Members',
+    home_rewards_desc: 'Sign up as a member to get thousands of discounts, free delivery codes, and earn reward points every day!',
+    home_rewards_btn: 'ORDER & EARN POINTS NOW',
+    home_companion_badge: 'FEATURED OFFERS',
+    home_companion_title: 'Always by your side',
+    home_fast_30m: 'Fast 30-min delivery',
+    home_order_now_caps: 'ORDER NOW',
+    home_care_247: 'beFood Care 24/7',
+    home_support_caps: 'CUSTOMER SUPPORT',
+    home_news_daily: 'Constantly updated',
+    home_news_caps: 'DAILY NEWS',
+    home_network_badge: 'NATIONWIDE RESTAURANT NETWORK',
+    home_network_title: 'beFood Restaurant Network',
+    home_network_desc: 'Thousands of your favorite stores, restaurants, and beFood drivers are always ready to serve delicious meals to your doorstep!',
+    home_explore_shops: 'EXPLORE STORES',
+
+    // Order Page (/order)
+    order_shop_list_title: 'Restaurant List',
+    order_chat_with_shop: 'Message Store',
+    order_error_title: 'Failed to load restaurant',
+    order_not_found: 'Restaurant information not found.',
+    order_empty_shops: 'No restaurants available in the system.',
+    order_loading: 'Loading...',
+
+    // Cart Page (/cart)
+    cart_title: 'Shopping Cart',
+    cart_items_count: 'items',
+    cart_empty_title: 'Your cart is completely empty',
+    cart_empty_desc: 'Head over to our stores to pick your favorite dishes now!!',
+    cart_order_now: 'Order Now',
+    cart_clear_all: 'Clear All',
+    cart_shop_label: 'Store',
+    cart_types: 'types',
+    cart_options_default: 'Options: Default',
+    cart_edit: 'Edit',
+    cart_subtotal: 'Total Amount',
+    cart_checkout_btn: 'Proceed to Checkout',
+    cart_confirm_remove: 'Remove this item from cart?',
+    cart_confirm_clear: 'Clear entire cart for this store?',
 
     // Auth & Login
     auth_login_title: 'ACCOUNT LOGIN',
@@ -202,47 +361,65 @@ export const translations = {
     contact_map_open: 'Open in Maps',
 
     // Footer
-    footer_about_title: 'About beFood',
+    footer_about_title: 'ABOUT BEFOOD',
+    footer_menu: 'Menu',
+    footer_promotions: 'Promotions',
+    footer_careers: 'Careers',
+    footer_support_link: 'Customer Support',
+    footer_stores_title: 'STORES',
+    footer_find_stores: 'Find Stores',
+    footer_track_orders: 'Track Orders',
+    footer_news_title: 'NEWS',
+    footer_latest_news: 'Latest News',
+    footer_blog: 'Blog',
+    footer_socials_title: 'SOCIALS',
     footer_about_desc: 'Leading online food delivery platform bringing delicious meals right to your doorstep.',
     footer_policies: 'Policies',
     footer_support: 'Support',
     footer_newsletter: 'Subscribe to Newsletter',
     footer_newsletter_desc: 'Get exclusive discounts and attractive weekly vouchers.',
+    footer_email_placeholder: 'Enter your email address...',
     footer_rights: 'Copyright belongs to beFood - Be Group © 2026. All rights reserved.',
+    footer_secure: '100% Safe & Secure',
   }
 };
 
 export function LanguageProvider({ children }) {
-  const [language, setLanguageState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('befood_language');
-      if (saved === 'en' || saved === 'vi') return saved;
-    }
-    return 'vi';
-  });
+  // Always start with 'vi' to ensure SSR and Client initial render match 100%
+  const [language, setLanguageState] = useState('vi');
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    if (typeof document !== 'undefined') {
-      document.documentElement.lang = language;
-    }
-  }, [language]);
+    setIsMounted(true);
+    try {
+      const saved = localStorage.getItem('befood_language');
+      if (saved === 'en' || saved === 'vi') {
+        setLanguageState(saved);
+        if (typeof document !== 'undefined') {
+          document.documentElement.lang = saved;
+        }
+      }
+    } catch (_) {}
+  }, []);
 
   const setLanguage = (lang) => {
     if (lang !== 'vi' && lang !== 'en') return;
     setLanguageState(lang);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('befood_language', lang);
-      document.documentElement.lang = lang;
-    }
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('befood_language', lang);
+        document.documentElement.lang = lang;
+      }
+    } catch (_) {}
   };
 
   const t = (key, fallback = '') => {
     const dict = translations[language] || translations.vi;
-    return dict[key] || fallback || key;
+    return dict[key] !== undefined ? dict[key] : (fallback || key);
   };
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+    <LanguageContext.Provider value={{ language, setLanguage, t, isMounted }}>
       {children}
     </LanguageContext.Provider>
   );

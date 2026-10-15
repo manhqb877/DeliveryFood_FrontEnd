@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import ProductCard from './ProductCard';
 
-export default function FlashSaleSection({ items, shopId }) {
+export default function FlashSaleSection({ items, shopId, isShopClosed }) {
   const [timeLeft, setTimeLeft] = useState({
     hours: 0,
     minutes: 0,
@@ -71,7 +71,7 @@ export default function FlashSaleSection({ items, shopId }) {
       <div className="relative z-10 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
         {items.map((product) => (
           <div key={`fs-${product.id}`} className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-            <ProductCard product={product} shopId={shopId} />
+            <ProductCard product={product} shopId={shopId} isShopClosed={isShopClosed} />
           </div>
         ))}
       </div>

@@ -18,6 +18,7 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [shopData, setShopData] = useState(null);
   
   const [quantity, setQuantity] = useState(1);
   const [selectedOptions, setSelectedOptions] = useState({});
@@ -37,15 +38,37 @@ export default function ProductDetailPage() {
     if (!id) return;
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
+    // Helper fetch có cơ chế an toàn: nếu API_BASE gặp lỗi mạng (TypeError: Failed to fetch) hoặc HTTP error thì fallback về localhost:8080
+    const fetchWithFallback = async (endpoint, options = {}) => {
+      try {
+        const res = await fetch(`${API_BASE}${endpoint}`, {
+          ...options,
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+            ...(options.headers || {})
+          }
+        });
+        if (res.ok) return res;
+        if (!API_BASE.includes('localhost:8080')) {
+          return await fetch(`http://localhost:8080/api/v1${endpoint}`, options);
+        }
+        return res;
+      } catch (err) {
+        // Bắt ngoại lệ mạng (Failed to fetch khi tunnel ngrok chết hoặc CORS bị chặn)
+        if (!API_BASE.includes('localhost:8080')) {
+          try {
+            return await fetch(`http://localhost:8080/api/v1${endpoint}`, options);
+          } catch (fallbackErr) {
+            throw err;
+          }
+        }
+        throw err;
+      }
+    };
+
     const fetchProduct = async () => {
       try {
-        let response = await fetch(`${API_BASE}/core/items/${id}`, {
-          cache: 'no-store',
-          headers: { 'ngrok-skip-browser-warning': 'true' }
-        });
-        if (!response.ok && API_BASE.includes("ngrok")) {
-          response = await fetch(`http://localhost:8080/api/v1/core/items/${id}`, { cache: 'no-store' });
-        }
+        let response = await fetchWithFallback(`/core/items/${id}`, { cache: 'no-store' });
         if (!response.ok) throw new Error("Không thể tải thông tin sản phẩm");
         const data = await response.json();
         setProduct(data);
@@ -84,19 +107,15 @@ export default function ProductDetailPage() {
         if (data.shopId) {
           try {
             setRelatedLoading(true);
-            let shopRes = await fetch(`${API_BASE}/core/shops/${data.shopId}/details`, {
-              headers: { 'ngrok-skip-browser-warning': 'true' }
-            });
-            if (!shopRes.ok && API_BASE.includes("ngrok")) {
-              shopRes = await fetch(`http://localhost:8080/api/v1/core/shops/${data.shopId}/details`);
-            }
+            let shopRes = await fetchWithFallback(`/core/shops/${data.shopId}/details`);
             if (shopRes.ok) {
-              const shopData = await shopRes.json();
+              const fetchedShop = await shopRes.json();
+              setShopData(fetchedShop);
               const allShopItems = [];
               const sameCatItems = [];
 
-              if (shopData?.categories && Array.isArray(shopData.categories)) {
-                shopData.categories.forEach((cat) => {
+              if (fetchedShop?.categories && Array.isArray(fetchedShop.categories)) {
+                fetchedShop.categories.forEach((cat) => {
                   if (cat.items && Array.isArray(cat.items)) {
                     cat.items.forEach((item) => {
                       if (String(item.id) !== String(data.id)) {
@@ -134,12 +153,7 @@ export default function ProductDetailPage() {
 
     const fetchReviews = async () => {
       try {
-        let response = await fetch(`${API_BASE}/reviews/product/${id}`, {
-          headers: { 'ngrok-skip-browser-warning': 'true' }
-        });
-        if (!response.ok && API_BASE.includes("ngrok")) {
-          response = await fetch(`http://localhost:8080/api/v1/reviews/product/${id}`);
-        }
+        let response = await fetchWithFallback(`/reviews/product/${id}`);
         if (response.ok) {
           const data = await response.json();
           setReviews(data);
@@ -211,6 +225,12 @@ export default function ProductDetailPage() {
   };
 
   const handleAddToCart = async () => {
+    const isShopClosed = shopData?.isOpen === false || shopData?.isAcceptingOrders === false;
+    if (isShopClosed) {
+      alert("Quán hiện đang đóng cửa hoặc tạm ngưng nhận đơn hàng. Quý khách vui lòng chọn quán khác hoặc quay lại sau!");
+      return;
+    }
+
     if (!isFormValid()) {
       alert("Vui lòng chọn đầy đủ các tùy chọn bắt buộc!");
       return;
@@ -404,23 +424,34 @@ export default function ProductDetailPage() {
               </div>
               
               {/* Add to cart */}
-              <button 
-                onClick={handleAddToCart}
-                disabled={!isFormValid() || isAdding || product?.status === 'SOLD_OUT'}
-                className="h-[52px] px-8 bg-[var(--color-primary)] text-black rounded-full text-[14px] font-bold tracking-wide flex items-center justify-center gap-2 hover:bg-[var(--color-primary-dark)] hover:text-white transition-colors shadow-sm cursor-pointer whitespace-nowrap flex-1 w-full disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isAdding ? (
-                  <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <ShoppingBagIcon className="w-5 h-5" />
-                )}
-                {product?.status === 'SOLD_OUT' 
-                  ? 'ĐÃ HẾT MÓN'
-                  : isAdding 
-                    ? 'ĐANG THÊM...' 
-                    : `THÊM VÀO GIỎ - ${calculateTotalPrice().toLocaleString('vi-VN')} đ`
-                }
-              </button>
+              {(() => {
+                const isShopClosed = shopData?.isOpen === false || shopData?.isAcceptingOrders === false;
+                return (
+                  <button 
+                    onClick={handleAddToCart}
+                    disabled={!isFormValid() || isAdding || product?.status === 'SOLD_OUT' || isShopClosed}
+                    className={`h-[52px] px-8 rounded-full text-[14px] font-bold tracking-wide flex items-center justify-center gap-2 transition-colors shadow-sm whitespace-nowrap flex-1 w-full ${
+                      isShopClosed 
+                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-80'
+                        : 'bg-[var(--color-primary)] text-black hover:bg-[var(--color-primary-dark)] hover:text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
+                    }`}
+                  >
+                    {isAdding ? (
+                      <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <ShoppingBagIcon className="w-5 h-5" />
+                    )}
+                    {isShopClosed 
+                      ? '⛔ QUÁN ĐANG ĐÓNG CỬA - KHÔNG THỂ ĐẶT'
+                      : product?.status === 'SOLD_OUT' 
+                      ? 'ĐÃ HẾT MÓN'
+                      : isAdding 
+                        ? 'ĐANG THÊM...' 
+                        : `THÊM VÀO GIỎ - ${calculateTotalPrice().toLocaleString('vi-VN')} đ`
+                    }
+                  </button>
+                );
+              })()}
             </div>
 
           </div>

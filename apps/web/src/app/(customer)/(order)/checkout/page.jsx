@@ -455,6 +455,24 @@ export default function CheckoutPage() {
       return;
     }
 
+    // Kiểm tra quán có đang mở cửa nhận đơn không
+    if (cartToOrder?.shopId) {
+      try {
+        const shopRes = await fetch(`${API}/core/shops/${cartToOrder.shopId}/details`, {
+          headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
+        if (shopRes.ok) {
+          const shopData = await shopRes.json();
+          if (shopData?.isOpen === false || shopData?.isAcceptingOrders === false) {
+            setErrorMessage(`⛔ Quán "${shopData.shopName || '#' + cartToOrder.shopId}" hiện đang đóng cửa hoặc tạm ngừng nhận đơn. Quý khách chưa thể tạo đơn hàng lúc này!`);
+            return;
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Check shop status warning in checkout:', checkErr);
+      }
+    }
+
     const pName = provinces.find(p => p.code == selectedProv)?.name || '';
     const dName = districts.find(d => d.code == selectedDist)?.name || '';
     const wName = wards.find(w => w.code == selectedWard)?.name || '';

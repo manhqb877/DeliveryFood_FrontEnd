@@ -3,8 +3,19 @@ import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import ProductModal from './ProductModal';
 import Link from 'next/link';
 
-export default function ProductCard({ product, shopId }) {
+export default function ProductCard({ product, shopId, isShopClosed }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleOpenModal = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (product.status === 'SOLD_OUT') return;
+    if (isShopClosed) {
+      alert('Quán hiện đang đóng cửa hoặc tạm ngưng nhận đơn. Quý khách vui lòng chọn quán khác hoặc quay lại sau!');
+      return;
+    }
+    setIsModalOpen(true);
+  };
 
   return (
     <>
@@ -12,13 +23,9 @@ export default function ProductCard({ product, shopId }) {
         
         {/* Quick View Button (Top Right) */}
         <button 
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (product.status !== 'SOLD_OUT') setIsModalOpen(true);
-          }}
-          className="absolute top-2 right-2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-white hover:scale-110 active:scale-95"
-          title="Xem nhanh"
+          onClick={handleOpenModal}
+          className="absolute top-2 right-2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-white hover:scale-110 active:scale-95 cursor-pointer"
+          title={isShopClosed ? "Quán đang đóng cửa" : "Xem nhanh"}
         >
           <MagnifyingGlassIcon className="w-4 h-4 text-gray-700" />
         </button>
@@ -69,12 +76,17 @@ export default function ProductCard({ product, shopId }) {
 
             {/* Badges Overlay */}
             <div className="absolute top-2 left-2 flex flex-col gap-1 z-10 pointer-events-none">
-              {product.priceName && (
+              {isShopClosed && (
+                <span className="inline-flex items-center rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
+                  Đóng cửa
+                </span>
+              )}
+              {product.priceName && !isShopClosed && (
                 <span className="inline-flex items-center rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
                   {product.priceName}
                 </span>
               )}
-              {product.status === 'AVAILABLE' && product.totalReviews > 20 && !product.priceName && (
+              {product.status === 'AVAILABLE' && product.totalReviews > 20 && !product.priceName && !isShopClosed && (
                 <span className="inline-flex items-center rounded-full bg-[var(--color-primary)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-black shadow-sm">
                   Bán chạy
                 </span>
@@ -110,18 +122,14 @@ export default function ProductCard({ product, shopId }) {
         {/* Add to Cart / Options button */}
         <button
           type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (product.status !== 'SOLD_OUT') setIsModalOpen(true);
-          }}
-          disabled={product.status === 'SOLD_OUT'}
+          onClick={handleOpenModal}
+          disabled={product.status === 'SOLD_OUT' || isShopClosed}
           className={`absolute bottom-3 md:bottom-4 right-3 md:right-4 w-7 h-7 rounded-full text-black flex items-center justify-center transition-all shadow-sm z-10 ${
-            product.status === 'SOLD_OUT' 
-              ? 'bg-gray-300 cursor-not-allowed opacity-50'
+            product.status === 'SOLD_OUT' || isShopClosed
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed opacity-60'
               : 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] hover:scale-110 active:scale-95 cursor-pointer opacity-70 group-hover:opacity-100'
           }`}
-          title={product.status === 'SOLD_OUT' ? 'Đã hết món' : 'Thêm vào giỏ'}
+          title={isShopClosed ? 'Quán hiện đang đóng cửa' : (product.status === 'SOLD_OUT' ? 'Đã hết món' : 'Thêm vào giỏ')}
         >
           <span className="text-lg font-bold leading-none mb-0.5">+</span>
         </button>
@@ -132,6 +140,7 @@ export default function ProductCard({ product, shopId }) {
         onClose={() => setIsModalOpen(false)}
         product={product}
         shopId={shopId}
+        isShopClosed={isShopClosed}
       />
     </>
   );

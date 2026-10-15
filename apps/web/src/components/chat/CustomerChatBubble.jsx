@@ -21,6 +21,14 @@ const FALLBACK_API_BASE = 'http://localhost:8086';
 const WS_URL = 'http://localhost:8086/ws-chat';
 const DEFAULT_SHOP_ICON = 'https://cdn-icons-png.flaticon.com/512/3081/3081559.png';
 
+async function safeFetch(url, options = {}) {
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    return null;
+  }
+}
+
 function playIncomingChime() {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -96,11 +104,12 @@ export default function CustomerChatBubble() {
       if (customerId) params.append('customerId', customerId.toString());
       if (guestSessionId) params.append('guestSessionId', guestSessionId.toString());
 
-      let res = await fetch(`${API_BASE}/conversations/customer?${params.toString()}`);
-      if (!res.ok) {
-        res = await fetch(`${FALLBACK_API_BASE}/conversations/customer?${params.toString()}`);
+      let res = await safeFetch(`${API_BASE}/conversations/customer?${params.toString()}`);
+      if (!res || !res.ok) {
+        const fallbackRes = await safeFetch(`${FALLBACK_API_BASE}/conversations/customer?${params.toString()}`);
+        if (fallbackRes && fallbackRes.ok) res = fallbackRes;
       }
-      if (res.ok) {
+      if (res && res.ok) {
         const json = await res.json();
         const list = json.data || (Array.isArray(json) ? json : []);
         setConversations(list);
@@ -123,17 +132,17 @@ export default function CustomerChatBubble() {
     setActiveConversation(conv);
     setIsLoadingMessages(true);
     try {
-      let res = await fetch(`${API_BASE}/conversations/${conv.id}/messages`);
-      if (!res.ok) {
-        res = await fetch(`${FALLBACK_API_BASE}/conversations/${conv.id}/messages`);
+      let res = await safeFetch(`${API_BASE}/conversations/${conv.id}/messages`);
+      if (!res || !res.ok) {
+        res = await safeFetch(`${FALLBACK_API_BASE}/conversations/${conv.id}/messages`);
       }
-      if (!res.ok) {
-        res = await fetch(`${API_BASE}/messages/conversation/${conv.id}`);
+      if (!res || !res.ok) {
+        res = await safeFetch(`${API_BASE}/messages/conversation/${conv.id}`);
       }
-      if (!res.ok) {
-        res = await fetch(`${FALLBACK_API_BASE}/messages/conversation/${conv.id}`);
+      if (!res || !res.ok) {
+        res = await safeFetch(`${FALLBACK_API_BASE}/messages/conversation/${conv.id}`);
       }
-      if (res.ok) {
+      if (res && res.ok) {
         const json = await res.json();
         const rawMsgs = json.data || (Array.isArray(json) ? json : []);
         // Filter out empty messages
@@ -171,20 +180,21 @@ export default function CustomerChatBubble() {
         customerAvatar: user?.avatarUrl || user?.avatar_url || null,
       };
 
-      let res = await fetch(`${API_BASE}/conversations/init`, {
+      let res = await safeFetch(`${API_BASE}/conversations/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        res = await fetch(`${FALLBACK_API_BASE}/conversations/init`, {
+      if (!res || !res.ok) {
+        const fallbackRes = await safeFetch(`${FALLBACK_API_BASE}/conversations/init`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
+        if (fallbackRes && fallbackRes.ok) res = fallbackRes;
       }
 
-      if (res.ok) {
+      if (res && res.ok) {
         const json = await res.json();
         const conv = json.data || json;
         setIsOpen(true);
@@ -328,20 +338,21 @@ export default function CustomerChatBubble() {
         messageType: 'TEXT',
       };
 
-      let res = await fetch(`${API_BASE}/messages`, {
+      let res = await safeFetch(`${API_BASE}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        res = await fetch(`${FALLBACK_API_BASE}/messages`, {
+      if (!res || !res.ok) {
+        const fallbackRes = await safeFetch(`${FALLBACK_API_BASE}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
+        if (fallbackRes && fallbackRes.ok) res = fallbackRes;
       }
 
-      if (res.ok) {
+      if (res && res.ok) {
         const json = await res.json();
         const serverMsg = json.data || json;
         if (serverMsg && serverMsg.id) {

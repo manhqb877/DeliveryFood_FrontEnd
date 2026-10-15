@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -17,20 +17,18 @@ import { useLanguage } from '@/context/LanguageContext';
 
 export default function Header() {
   const { language, setLanguage, t } = useLanguage();
-  const isVi = language === 'vi';
   const pathname = usePathname();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
-
   const leftNavItems = [
-    { id: 'about', label: isVi ? 'VỀ BEFOOD' : 'ABOUT BEFOOD', icon: Info, href: '/about' },
-    { id: 'careers', label: isVi ? 'NGHỀ NGHIỆP' : 'CAREERS', icon: Briefcase, href: '/careers' },
-    { id: 'support', label: isVi ? 'HỖ TRỢ' : 'SUPPORT', icon: Headset, href: '/support' },
+    { id: 'about', labelKey: 'nav_about', defaultLabel: 'VỀ BEFOOD', icon: Info, href: '/about' },
+    { id: 'careers', labelKey: 'nav_careers', defaultLabel: 'NGHỀ NGHIỆP', icon: Briefcase, href: '/careers' },
+    { id: 'support', labelKey: 'nav_support', defaultLabel: 'HỖ TRỢ', icon: Headset, href: '/support' },
   ];
 
   const rightNavItems = [
-    { id: 'news', label: isVi ? 'TIN TỨC' : 'NEWS', icon: Newspaper, href: '/news' },
-    { id: 'stores', label: isVi ? 'CỬA HÀNG' : 'STORES', icon: Storefront, href: '/stores' },
+    { id: 'news', labelKey: 'nav_news', defaultLabel: 'TIN TỨC', icon: Newspaper, href: '/news' },
+    { id: 'stores', labelKey: 'nav_stores', defaultLabel: 'CỬA HÀNG', icon: Storefront, href: '/stores' },
   ];
 
   return (
@@ -51,8 +49,11 @@ export default function Header() {
                       : 'text-gray-600 hover:bg-gray-100 hover:text-black font-bold'
                   }`}
                 >
-                  <span className="text-[11px] xl:text-[13px] uppercase tracking-wider whitespace-nowrap">
-                    {item.label}
+                  <span
+                    suppressHydrationWarning
+                    className="text-[11px] xl:text-[13px] uppercase tracking-wider whitespace-nowrap"
+                  >
+                    {t(item.labelKey, item.defaultLabel)}
                   </span>
                 </Link>
               );
@@ -85,8 +86,11 @@ export default function Header() {
                       : 'text-gray-600 hover:bg-gray-100 hover:text-black font-bold'
                   }`}
                 >
-                  <span className="text-[11px] xl:text-[13px] uppercase tracking-wider whitespace-nowrap">
-                    {item.label}
+                  <span
+                    suppressHydrationWarning
+                    className="text-[11px] xl:text-[13px] uppercase tracking-wider whitespace-nowrap"
+                  >
+                    {t(item.labelKey, item.defaultLabel)}
                   </span>
                 </Link>
               );
@@ -98,7 +102,7 @@ export default function Header() {
                 type="button"
                 onClick={() => setLanguage('vi')}
                 className={`p-1 rounded transition-all cursor-pointer ${
-                  language === 'vi' ? 'bg-white shadow-xs scale-105 opacity-100' : 'opacity-50 hover:opacity-100'
+                  language === 'vi' ? 'bg-white shadow-xs scale-105 opacity-100 ring-2 ring-amber-400' : 'opacity-50 hover:opacity-100'
                 }`}
                 title="Tiếng Việt"
               >
@@ -112,7 +116,7 @@ export default function Header() {
                 type="button"
                 onClick={() => setLanguage('en')}
                 className={`p-1 rounded transition-all cursor-pointer ${
-                  language === 'en' ? 'bg-white shadow-xs scale-105 opacity-100' : 'opacity-50 hover:opacity-100'
+                  language === 'en' ? 'bg-white shadow-xs scale-105 opacity-100 ring-2 ring-amber-400' : 'opacity-50 hover:opacity-100'
                 }`}
                 title="English"
               >
@@ -124,22 +128,37 @@ export default function Header() {
               </button>
             </div>
 
-
-
             {/* ORDER CTA */}
             <Link
               href="/order"
               className="group flex items-center gap-2.5 rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-[13px] font-black uppercase tracking-wider text-black shadow-sm transition-all duration-200 hover:bg-[var(--color-primary-dark)] hover:shadow-md active:scale-95 cursor-pointer ml-1"
             >
-              <span>ĐẶT HÀNG</span>
+              <span suppressHydrationWarning>{t('nav_order_now', 'ĐẶT HÀNG')}</span>
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-black/10 transition-transform duration-200 group-hover:translate-x-1 text-black">
                 <ArrowRight size={13} weight="bold" />
               </span>
             </Link>
           </div>
 
-          {/* MOBILE TOGGLE */}
+          {/* MOBILE TOGGLE & LANGUAGE */}
           <div className="flex items-center gap-2 lg:hidden ml-2">
+            <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-md">
+              <button
+                type="button"
+                onClick={() => setLanguage('vi')}
+                className={`p-0.5 rounded ${language === 'vi' ? 'bg-white shadow-xs' : 'opacity-50'}`}
+              >
+                <img src="https://flagcdn.com/w40/vn.png" alt="VN" className="h-[12px] w-[18px] object-cover rounded-[1px]" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage('en')}
+                className={`p-0.5 rounded ${language === 'en' ? 'bg-white shadow-xs' : 'opacity-50'}`}
+              >
+                <img src="https://flagcdn.com/w40/gb.png" alt="EN" className="h-[12px] w-[18px] object-cover rounded-[1px]" />
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={() => setShowMobileMenu(!showMobileMenu)}
@@ -150,6 +169,29 @@ export default function Header() {
           </div>
         </div>
       </div>
+
+      {/* MOBILE MENU DROPDOWN */}
+      {showMobileMenu && (
+        <div className="lg:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-2 shadow-lg">
+          {[...leftNavItems, ...rightNavItems].map((item) => (
+            <Link
+              key={item.id}
+              href={item.href}
+              onClick={() => setShowMobileMenu(false)}
+              className="block px-3 py-2 rounded-xl text-gray-700 font-bold hover:bg-amber-50 hover:text-black transition-colors"
+            >
+              <span suppressHydrationWarning>{t(item.labelKey, item.defaultLabel)}</span>
+            </Link>
+          ))}
+          <Link
+            href="/order"
+            onClick={() => setShowMobileMenu(false)}
+            className="block text-center mt-3 bg-[var(--color-primary)] text-black font-black py-2.5 rounded-xl uppercase tracking-wider"
+          >
+            <span suppressHydrationWarning>{t('nav_order_now', 'ĐẶT HÀNG')}</span>
+          </Link>
+        </div>
+      )}
     </header>
   );
 }

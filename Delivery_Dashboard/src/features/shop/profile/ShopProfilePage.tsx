@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { dbService } from '@/api/client';
 import { ShopProfile } from '@/api/mockData';
+import { ImageUploadPicker } from '@/components/ui/ImageUploadPicker';
+import { useToast } from '@/components/ui/Toast';
 import {
   AlertCircle, Clock, MapPin, Save, Store, CheckCircle, ShieldAlert,
   Phone, Mail, Globe, FileText, Building2, Layers, Hash,
@@ -265,6 +267,7 @@ function SelectField({ label, value, onChange, options }: {
 
 // =============================================
 export function ShopProfilePage() {
+  const { success, error } = useToast();
   const initialShop = (dbService as any).getCachedMyShop?.() as ShopProfile | null;
   const [shop, setShop] = useState<ShopProfile | null>(() => initialShop);
   const [loading, setLoading] = useState(() => !initialShop);
@@ -370,36 +373,42 @@ export function ShopProfilePage() {
   const handleSaveProfile = async () => {
     if (!shop) return;
     setSaving(true);
-    const updated = await dbService.updateShopProfile(shop.id, {
-      shop_name: shopName,
-      shop_type: shopType as ShopProfile['shop_type'],
-      shop_description: description,
-      phone,
-      email,
-      zalo_link: zaloLink,
-      facebook_link: facebookLink,
-      location_detail: locationDetail,
-      building_code: buildingCode,
-      floor,
-      unit_number: unitNumber,
-      logo_url: logoUrl,
-      cover_image_url: coverUrl,
-      business_license_number: businessLicenseNumber,
-      food_safety_cert_number: foodSafetyCertNumber,
-      tax_id: taxId,
-      max_concurrent_orders: Number(maxConcurrentOrders) || undefined,
-      avg_prep_time_minutes: Number(avgPrepTime) || undefined,
-      min_order_value: Number(minOrderValue) || undefined,
-      shipper_model: shipperModel as ShopProfile['shipper_model'],
-      is_open: isOpen,
-      is_accepting_orders: isAcceptingOrders,
-      business_hours: businessHours,
-    });
-    setSaving(false);
-    if (updated) {
-      setShop(updated);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+    try {
+      const updated = await dbService.updateShopProfile(shop.id, {
+        shop_name: shopName,
+        shop_type: shopType as ShopProfile['shop_type'],
+        shop_description: description,
+        phone,
+        email,
+        zalo_link: zaloLink,
+        facebook_link: facebookLink,
+        location_detail: locationDetail,
+        building_code: buildingCode,
+        floor,
+        unit_number: unitNumber,
+        logo_url: logoUrl,
+        cover_image_url: coverUrl,
+        business_license_number: businessLicenseNumber,
+        food_safety_cert_number: foodSafetyCertNumber,
+        tax_id: taxId,
+        max_concurrent_orders: Number(maxConcurrentOrders) || undefined,
+        avg_prep_time_minutes: Number(avgPrepTime) || undefined,
+        min_order_value: Number(minOrderValue) || undefined,
+        shipper_model: shipperModel as ShopProfile['shipper_model'],
+        is_open: isOpen,
+        is_accepting_orders: isAcceptingOrders,
+        business_hours: businessHours,
+      });
+      setSaving(false);
+      if (updated) {
+        setShop(updated);
+        setSaved(true);
+        success('✅ Đã lưu cập nhật hồ sơ gian hàng thành công!');
+        setTimeout(() => setSaved(false), 3000);
+      }
+    } catch (e: any) {
+      setSaving(false);
+      error(e?.message || 'Lỗi khi cập nhật hồ sơ quán.');
     }
   };
 
@@ -529,19 +538,19 @@ export function ShopProfilePage() {
       {/* ---- Section 4: Hình ảnh ---- */}
       <FormSection title="Hình Ảnh Gian Hàng" icon={Store}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-          <ImageUploadField
+          <ImageUploadPicker
             label="Logo / Avatar Gian Hàng"
             value={logoUrl}
             onChange={setLogoUrl}
-            aspect="square"
-            hint="Hiển thị đại diện cho gian hàng trên danh sách quán, thực đơn và hóa đơn khách hàng"
+            aspectRatio="square"
+            hint="Hiển thị đại diện cho gian hàng trên danh sách quán, thực đơn và hóa đơn khách hàng (khuyên dùng vuông 1:1)"
           />
-          <ImageUploadField
+          <ImageUploadPicker
             label="Ảnh Bìa Gian Hàng (Banner)"
             value={coverUrl}
             onChange={setCoverUrl}
-            aspect="banner"
-            hint="Hiển thị trên đầu trang chi tiết gian hàng và thẻ giới thiệu nổi bật"
+            aspectRatio="video"
+            hint="Hiển thị trên đầu trang chi tiết gian hàng và thẻ giới thiệu nổi bật (khuyên dùng ngang 16:9)"
           />
         </div>
       </FormSection>
@@ -685,16 +694,45 @@ export function ShopProfilePage() {
         </span>
       </div>
 
-      {/* Save Button (bottom) */}
-      <div className="flex justify-end">
+      {/* Save Button (bottom of page) */}
+      <div className="flex justify-end pt-2 pb-12">
         <button
           onClick={handleSaveProfile}
           disabled={saving}
-          className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer shadow-sm ${
+          className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer shadow-sm active:scale-95 ${
             saved ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
           }`}
         >
           {saving ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+          {saving ? 'Đang lưu hồ sơ...' : saved ? 'Đã lưu thành công!' : 'Lưu Thay Đổi'}
+        </button>
+      </div>
+
+      {/* Sticky Floating Save Bar (Luôn hiển thị khi cuộn trang) */}
+      <div 
+        style={{ zIndex: 9990 }}
+        className="fixed bottom-6 right-6 md:right-10 z-[9990] flex items-center gap-3.5 bg-white/95 backdrop-blur-md border border-slate-200/90 shadow-2xl px-5 py-3 rounded-2xl animate-in fade-in slide-in-from-bottom-5"
+      >
+        <div className="hidden sm:flex flex-col pr-3 border-r border-slate-200">
+          <span className="text-xs font-bold text-slate-800">Hồ Sơ Gian Hàng</span>
+          <span className="text-[11px] text-slate-500">Bấm lưu để đồng bộ thông tin lên hệ thống</span>
+        </div>
+        <button
+          onClick={handleSaveProfile}
+          disabled={saving}
+          className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md active:scale-95 ${
+            saved
+              ? 'bg-emerald-600 text-white shadow-emerald-500/20'
+              : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
+          }`}
+        >
+          {saving ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : saved ? (
+            <CheckCircle className="w-4 h-4" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
           {saving ? 'Đang lưu...' : saved ? 'Đã lưu!' : 'Lưu Thay Đổi'}
         </button>
       </div>

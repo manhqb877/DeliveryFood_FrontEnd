@@ -427,6 +427,23 @@ export const dbService = {
     return (dbService as any)._cachedReviews?.[sid] || null;
   },
 
+  getCurrentShopIdSync: (): number => {
+    if ((dbService as any)._cachedMyShop?.id) {
+      return (dbService as any)._cachedMyShop.id;
+    }
+    try {
+      const stored = localStorage.getItem('hyperlocal_active_shop_id');
+      if (stored && Number(stored)) return Number(stored);
+      const currentUserRaw = localStorage.getItem('hyperlocal_current_user');
+      if (currentUserRaw) {
+        const u = JSON.parse(currentUserRaw);
+        if (u.shop_id) return Number(u.shop_id);
+        if (u.id) return Number(u.id);
+      }
+    } catch (_) {}
+    return 1;
+  },
+
   getMyShop: async (forceRefresh = false): Promise<ShopProfile | null> => {
     const currentUserRaw = localStorage.getItem('hyperlocal_current_user');
     const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : null;
@@ -553,6 +570,9 @@ export const dbService = {
       return result;
     })().then((shop) => {
       (dbService as any)._cachedMyShop = shop;
+      if (shop?.id) {
+        try { localStorage.setItem('hyperlocal_active_shop_id', String(shop.id)); } catch (_) {}
+      }
       (dbService as any)._cachedMyShopPromise = null;
       return shop;
     }).catch((err) => {
@@ -728,7 +748,30 @@ export const dbService = {
     return { user: newUser, shop: newShop };
   },
   updateShopProfile: async (shopId: number, data: Partial<ShopProfile>) => {
-    // Try calling backend API if auth token exists
+    (dbService as any)._cachedMyShop = null;
+    (dbService as any)._cachedShops = null;
+
+    // 1. Always update core.shops in Neon DB directly
+    try {
+      await fetch(`http://${API_HOST}:8080/api/v1/core/shops/${shopId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopName: data.shop_name,
+          shopDescription: data.shop_description,
+          logoUrl: data.logo_url,
+          coverImageUrl: data.cover_image_url,
+          locationDetail: data.location_detail,
+          phone: data.phone,
+          isOpen: data.is_open,
+          isAcceptingOrders: data.is_accepting_orders,
+        })
+      });
+    } catch (e) {
+      console.warn('Failed to update core.shops:', e);
+    }
+
+    // 2. Also try calling auth/shops/me if token exists
     const token = getValidToken();
     if (token) {
       try {
@@ -755,9 +798,10 @@ export const dbService = {
           localStorage.removeItem('auth_token');
         } else if (res.ok) {
           const apiRes = await res.json();
-          console.log('Backend profile updated:', apiRes);
           if (apiRes.data) {
-            return mapBackendShopToProfile(apiRes.data);
+            const mapped = mapBackendShopToProfile(apiRes.data);
+            (dbService as any)._cachedMyShop = mapped;
+            return mapped;
           }
         }
       } catch (err) {
@@ -768,9 +812,24 @@ export const dbService = {
     const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
     const updated = shops.map(s => s.id === shopId ? { ...s, ...data } : s);
     setStored(STORAGE_KEYS.SHOPS, updated);
-    return updated.find(s => s.id === shopId);
+    const resShop = updated.find(s => s.id === shopId);
+    (dbService as any)._cachedMyShop = resShop || null;
+    return resShop;
   },
   toggleShopOpenStatus: async (shopId: number, isOpen: boolean) => {
+    (dbService as any)._cachedMyShop = null;
+    (dbService as any)._cachedShops = null;
+
+    // 1. Update core.shops directly
+    try {
+      await fetch(`http://${API_HOST}:8080/api/v1/core/shops/${shopId}/status?isOpen=${isOpen}`, {
+        method: 'PATCH',
+      });
+    } catch (e) {
+      console.warn('Failed to update status in core.shops:', e);
+    }
+
+    // 2. Also update auth/shops/me/open if token exists
     const token = getValidToken();
     if (token) {
       try {
@@ -789,9 +848,26 @@ export const dbService = {
     const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
     const updated = shops.map(s => s.id === shopId ? { ...s, is_open: isOpen } : s);
     setStored(STORAGE_KEYS.SHOPS, updated);
-    return updated.find(s => s.id === shopId);
+    const resShop = updated.find(s => s.id === shopId);
+    if (resShop) {
+      (dbService as any)._cachedMyShop = resShop;
+    }
+    return resShop;
   },
   toggleShopAcceptingOrders: async (shopId: number, isAcceptingOrders: boolean) => {
+    (dbService as any)._cachedMyShop = null;
+    (dbService as any)._cachedShops = null;
+
+    // 1. Update core.shops directly
+    try {
+      await fetch(`http://${API_HOST}:8080/api/v1/core/shops/${shopId}/status?isAcceptingOrders=${isAcceptingOrders}`, {
+        method: 'PATCH',
+      });
+    } catch (e) {
+      console.warn('Failed to update isAcceptingOrders in core.shops:', e);
+    }
+
+    // 2. Also update auth/shops/me/accepting if token exists
     const token = getValidToken();
     if (token) {
       try {
@@ -810,7 +886,11 @@ export const dbService = {
     const shops = getStored<ShopProfile[]>(STORAGE_KEYS.SHOPS, initialShops);
     const updated = shops.map(s => s.id === shopId ? { ...s, is_accepting_orders: isAcceptingOrders } : s);
     setStored(STORAGE_KEYS.SHOPS, updated);
-    return updated.find(s => s.id === shopId);
+    const resShop = updated.find(s => s.id === shopId);
+    if (resShop) {
+      (dbService as any)._cachedMyShop = resShop;
+    }
+    return resShop;
   },
 
   // SHIPPERS
@@ -919,16 +999,18 @@ export const dbService = {
   },
 
   // CATEGORIES
-  getCategories: async (shopId: number) => {
+  getCategories: async (shopId: number, forceRefresh = false) => {
     try {
       let targetShopId = shopId || (dbService as any)._cachedMyShop?.id || 1;
       
-      // Fast cache return (0ms)
-      if ((dbService as any)._cachedCategories?.[targetShopId]) {
+      // Fast cache return (0ms) if not forceRefresh
+      if (!forceRefresh && (dbService as any)._cachedCategories?.[targetShopId]) {
         return (dbService as any)._cachedCategories[targetShopId];
       }
 
-      const res = await fetch(`http://${API_HOST}:8080/api/v1/core/categories/shop/${targetShopId}`);
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/core/categories/shop/${targetShopId}`, {
+        cache: forceRefresh ? 'no-store' : 'default'
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.data && Array.isArray(json.data)) {
@@ -952,6 +1034,8 @@ export const dbService = {
             available_until: cat.availableUntil ? String(cat.availableUntil).substring(0, 5) : '',
             availableUntil: cat.availableUntil ? String(cat.availableUntil).substring(0, 5) : '',
           }));
+          // Sắp xếp ID giảm dần: Đảm bảo danh mục mới nhất luôn ở ĐẦU TIÊN
+          mapped.sort((a: any, b: any) => (Number(b.id) || 0) - (Number(a.id) || 0));
           (dbService as any)._cachedCategories = (dbService as any)._cachedCategories || {};
           (dbService as any)._cachedCategories[targetShopId] = mapped;
           return mapped;
@@ -1003,7 +1087,10 @@ export const dbService = {
       });
       if (res.ok) {
         const json = await res.json();
-        return json.data;
+        // Invalidate category cache so subsequent fetches get fresh data!
+        (dbService as any)._cachedCategories = null;
+        try { localStorage.removeItem('hyperlocal_cached_categories'); } catch (_) {}
+        return json.data || json;
       }
       const errText = await res.text();
       console.warn('Failed to save category', errText);
@@ -1019,6 +1106,8 @@ export const dbService = {
         method: 'DELETE'
       });
       if (res.ok) {
+        (dbService as any)._cachedCategories = null;
+        try { localStorage.removeItem('hyperlocal_cached_categories'); } catch (_) {}
         return true;
       }
     } catch(e) {
@@ -1028,16 +1117,18 @@ export const dbService = {
   },
 
   // ITEMS
-  getItems: async (shopId: number) => {
+  getItems: async (shopId: number, forceRefresh = false) => {
     try {
       let targetShopId = shopId || (dbService as any)._cachedMyShop?.id || 1;
 
-      // Fast cache return (0ms)
-      if ((dbService as any)._cachedItems?.[targetShopId]) {
+      // Fast cache return (0ms) if not forceRefresh
+      if (!forceRefresh && (dbService as any)._cachedItems?.[targetShopId]) {
         return (dbService as any)._cachedItems[targetShopId];
       }
 
-      const res = await fetch(`http://${API_HOST}:8080/api/v1/core/shops/${targetShopId}/details`);
+      const res = await fetch(`http://${API_HOST}:8080/api/v1/core/shops/${targetShopId}/details`, {
+        cache: forceRefresh ? 'no-store' : 'default'
+      });
       if (res.ok) {
         const data = await res.json();
         if (data && data.categories) {
@@ -1067,6 +1158,8 @@ export const dbService = {
               });
             }
           });
+          // Sắp xếp ID giảm dần: Đảm bảo món mới thêm nhất luôn ở ĐẦU TIÊN
+          items.sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
           (dbService as any)._cachedItems = (dbService as any)._cachedItems || {};
           (dbService as any)._cachedItems[targetShopId] = items;
           return items;
@@ -1081,6 +1174,8 @@ export const dbService = {
     return undefined;
   },
   toggleItemStatus: async (itemId: number, newStatus: Item['status']) => {
+    (dbService as any)._cachedItems = null;
+    try { localStorage.removeItem('hyperlocal_cached_items'); } catch (_) {}
     try {
       const res = await fetch(`http://${API_HOST}:8080/api/v1/core/items/${itemId}`, {
         method: 'PUT',
@@ -1100,6 +1195,8 @@ export const dbService = {
     return updated;
   },
   deleteItem: async (itemId: number) => {
+    (dbService as any)._cachedItems = null;
+    try { localStorage.removeItem('hyperlocal_cached_items'); } catch (_) {}
     try {
       const url = `http://${API_HOST}:8080/api/v1/core/items/${itemId}`;
       await fetch(url, {
@@ -1111,6 +1208,8 @@ export const dbService = {
     setStored(STORAGE_KEYS.ITEMS, updated);
   },
   saveItem: async (item: Partial<Item>) => {
+    (dbService as any)._cachedItems = null;
+    try { localStorage.removeItem('hyperlocal_cached_items'); } catch (_) {}
     try {
       const isUpdate = !!item.id;
       const url = isUpdate 
@@ -1138,7 +1237,9 @@ export const dbService = {
       });
       if (res.ok) {
         const data = await res.json();
-        return data;
+        (dbService as any)._cachedItems = null;
+        try { localStorage.removeItem('hyperlocal_cached_items'); } catch (_) {}
+        return data?.data || data;
       }
     } catch (e) {
       console.warn('Failed to save item to backend', e);
