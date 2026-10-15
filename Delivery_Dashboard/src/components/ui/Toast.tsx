@@ -69,7 +69,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ showToast, success, error, warning, info, removeToast }}>
       {children}
       {/* Toast Notification Container */}
-      <div className="fixed top-5 right-5 z-9999 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
+      <div 
+        style={{ zIndex: 99999 }}
+        className="fixed top-5 right-5 z-[99999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none"
+      >
         {toasts.map((toast) => {
           const isSuccess = toast.type === 'success';
           const isError = toast.type === 'error';

@@ -55,6 +55,17 @@ export default function TrackingPage() {
     }
   }, []);
 
+  // Polling cập nhật tiến trình đơn hàng và vị trí giao hàng mỗi 3 giây
+  useEffect(() => {
+    if (!orderCode) return;
+    const interval = setInterval(() => {
+      if (order && !['DELIVERED', 'COMPLETED', 'CANCELLED'].includes(order.orderStatus)) {
+        fetchOrderByCode(orderCode, true);
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [orderCode, order?.orderStatus]);
+
   const fetchUserOrders = async () => {
     setLoadingUserOrders(true);
     try {
@@ -94,12 +105,14 @@ export default function TrackingPage() {
     }
   };
 
-  const fetchOrderByCode = async (codeToSearch) => {
+  const fetchOrderByCode = async (codeToSearch, isSilent = false) => {
     if (!codeToSearch || !codeToSearch.trim()) return;
 
-    setLoading(true);
-    setError('');
-    setOrder(null);
+    if (!isSilent) {
+      setLoading(true);
+      setError('');
+      setOrder(null);
+    }
 
     try {
       const res = await fetch(`${API_GATEWAY}/orders/code/${codeToSearch.trim()}`);
@@ -121,9 +134,13 @@ export default function TrackingPage() {
         console.warn('Could not fetch delivery data:', e);
       }
     } catch (err) {
-      setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      if (!isSilent) {
+        setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      }
     } finally {
-      setLoading(false);
+      if (!isSilent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -520,8 +537,8 @@ export default function TrackingPage() {
 
             {/* Vị trí Shipper (hiện khi đang lấy hàng hoặc đang giao) */}
             {order.orderStatus !== 'CANCELLED' &&
-              ['PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'DELIVERING'].includes(order.orderStatus) &&
-              deliveryData?.shipperId && (
+              ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'PICKED_UP', 'DELIVERING'].includes(order.orderStatus) &&
+              deliveryData && (
                 <div className="mb-8">
                   <h3 className="font-bold text-gray-900 mb-3 uppercase tracking-wide text-xs md:text-sm border-b pb-2 flex items-center gap-2">
                     <Truck className="w-4 h-4 text-orange-500" />
@@ -532,8 +549,29 @@ export default function TrackingPage() {
                       shipperId={deliveryData.shipperId}
                       pickupLocation={{ lat: deliveryData.pickupLat || 10.7769, lng: deliveryData.pickupLng || 106.7009 }}
                       deliveryLocation={{ lat: deliveryData.deliveryLat || 10.78, lng: deliveryData.deliveryLng || 106.705 }}
+                      pickup2Location={deliveryData.pickup2Lat ? { lat: deliveryData.pickup2Lat, lng: deliveryData.pickup2Lng } : undefined}
+                      isMultiShop={Boolean(deliveryData.isMultiShop || deliveryData.pickup2Lat)}
+                      shop1Name={deliveryData.shop1Name || order.shopName}
+                      shop2Name={deliveryData.shop2Name}
+                      pickup1Completed={deliveryData.pickup1Completed}
+                      pickup2Completed={deliveryData.pickup2Completed}
+                      optimalPickupOrder={deliveryData.optimalPickupOrder}
                     />
                   </div>
+                  {Boolean(deliveryData.isMultiShop || deliveryData.pickup2Lat) && (
+                    <div className="mt-2.5 p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between text-xs text-purple-700 font-semibold">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 bg-purple-200 text-purple-800 rounded font-extrabold text-[10px]">ĐƠN 2 QUÁN</span>
+                        <span>
+                          {deliveryData.pickup1Completed && deliveryData.pickup2Completed
+                            ? '✅ Shipper đã lấy đủ món cả 2 quán, đang giao đến bạn!'
+                            : deliveryData.pickup1Completed || deliveryData.pickup2Completed
+                            ? '🛵 Shipper đã gom xong 1/2 quán, đang ghé quán thứ 2!'
+                            : '🛵 Shipper đang di chuyển đến các quán để lấy hàng'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

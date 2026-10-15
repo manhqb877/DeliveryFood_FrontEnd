@@ -5,12 +5,35 @@ import { CardGridItem } from '@/components/ui/Card';
 import { FilterBar } from '@/components/ui/FilterBar';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
+import { ImageUploadPicker } from '@/components/ui/ImageUploadPicker';
+import { useToast } from '@/components/ui/Toast';
 import { Plus, Edit2, Trash2, Layers } from 'lucide-react';
 
 export function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>(() => (dbService as any).getCachedCategories?.() || []);
-  const [items, setItems] = useState<Item[]>(() => (dbService as any).getCachedItems?.() || []);
-  const [loading, setLoading] = useState(() => !((dbService as any).getCachedCategories?.()?.length));
+  const { success, error } = useToast();
+
+  // Instant cache load: read from localStorage first (0ms load time)
+  const [categories, setCategories] = useState<Category[]>(() => {
+    try {
+      const stored = localStorage.getItem('hyperlocal_cached_categories');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) {}
+    return (dbService as any).getCachedCategories?.() || [];
+  });
+  const [items, setItems] = useState<Item[]>(() => {
+    try {
+      const stored = localStorage.getItem('hyperlocal_cached_items');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) {}
+    return (dbService as any).getCachedItems?.() || [];
+  });
+  const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
 
@@ -35,17 +58,28 @@ export function CategoriesPage() {
     available_until: '22:00',
   });
 
-  const loadData = async (showLoading = false) => {
-    if (showLoading || categories.length === 0) setLoading(true);
+  const loadData = async (showLoading = false, forceRefresh = false) => {
+    if (showLoading && categories.length === 0) setLoading(true);
     try {
-      const myShop = await dbService.getMyShop();
-      const currentShopId = myShop?.id || 1;
+      const currentShopId = (dbService as any).getCurrentShopIdSync?.() || 1;
       const [catData, itemData] = await Promise.all([
-        dbService.getCategories(currentShopId),
-        dbService.getItems(currentShopId),
+        dbService.getCategories(currentShopId, forceRefresh),
+        dbService.getItems(currentShopId, forceRefresh),
       ]);
-      setCategories(catData || []);
-      setItems(itemData || []);
+      if (catData && catData.length > 0) {
+        catData.sort((a: any, b: any) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        setCategories(catData);
+        try {
+          localStorage.setItem('hyperlocal_cached_categories', JSON.stringify(catData));
+        } catch (_) {}
+      }
+      if (itemData && itemData.length > 0) {
+        itemData.sort((a: any, b: any) => (Number(b.id) || 0) - (Number(a.id) || 0));
+        setItems(itemData);
+        try {
+          localStorage.setItem('hyperlocal_cached_items', JSON.stringify(itemData));
+        } catch (_) {}
+      }
     } catch (e) {
       console.error('Error loading data:', e);
     } finally {
@@ -54,7 +88,7 @@ export function CategoriesPage() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(false, true);
   }, []);
 
   const fetchCategoryOptions = async (categoryId: number) => {
@@ -68,53 +102,92 @@ export function CategoriesPage() {
 
   const handleSaveOption = async () => {
     if (!optionsCategory) return;
-    if (originalEditingOption) {
-      // Update
-      await (dbService as any).updateBulkCategoryOption(
-        optionsCategory.id,
-        originalEditingOption.group_name,
-        originalEditingOption.option_name,
-        editingOption
-      );
-    } else {
-      // Add
-      await (dbService as any).addBulkCategoryOption(
-        optionsCategory.id,
-        editingOption
-      );
+    try {
+      if (originalEditingOption) {
+        await (dbService as any).updateBulkCategoryOption(
+          optionsCategory.id,
+          originalEditingOption.group_name,
+          originalEditingOption.option_name,
+          editingOption
+        );
+        success('Đã cập nhật Topping thành công!');
+      } else {
+        await (dbService as any).addBulkCategoryOption(
+          optionsCategory.id,
+          editingOption
+        );
+        success('Đã thêm Topping hàng loạt thành công!');
+      }
+      setIsAddOptModalOpen(false);
+      fetchCategoryOptions(optionsCategory.id);
+    } catch (err: any) {
+      error(err?.message || 'Lỗi khi lưu Topping');
     }
-    setIsAddOptModalOpen(false);
-    fetchCategoryOptions(optionsCategory.id);
   };
 
   const handleDeleteOption = async (groupName: string, optionName: string) => {
     if (!optionsCategory) return;
     if (confirm('Bạn có chắc muốn xoá Topping này khỏi TOÀN BỘ món ăn trong danh mục?')) {
       await (dbService as any).deleteBulkCategoryOption(optionsCategory.id, groupName, optionName);
+      success('Đã xoá Topping khỏi danh mục!');
       fetchCategoryOptions(optionsCategory.id);
     }
   };
 
   const handleSave = async () => {
     if (!editingCategory.name?.trim()) {
-      alert('Vui lòng nhập tên danh mục!');
+      error('Vui lòng nhập tên danh mục!');
       return;
     }
+    const isUpdate = !!editingCategory.id;
     try {
-      const myShop = await dbService.getMyShop();
-      const currentShopId = myShop?.id || 1;
+      const currentShopId = (dbService as any).getCurrentShopIdSync?.() || 1;
       setIsModalOpen(false);
+
       const res = await dbService.saveCategory({ ...editingCategory, shop_id: currentShopId });
-      if (res) {
-        await loadData(false);
+      
+      // Optimistic update: đưa mục mới lên NGAY ĐẦU DANH SÁCH (vị trí #1)
+      const savedCat: Category = {
+        ...editingCategory,
+        id: res?.id || editingCategory.id || Date.now(),
+        shop_id: currentShopId,
+        shopId: currentShopId,
+        name: editingCategory.name.trim(),
+        description: editingCategory.description || '',
+        image_url: editingCategory.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300',
+        imageUrl: editingCategory.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300',
+        icon_emoji: editingCategory.icon_emoji || '🍲',
+        iconEmoji: editingCategory.icon_emoji || '🍲',
+        sort_order: editingCategory.sort_order ?? 1,
+        sortOrder: editingCategory.sort_order ?? 1,
+        is_active: editingCategory.is_active ?? true,
+        isActive: editingCategory.is_active ?? true,
+        available_from: editingCategory.available_from || '06:00',
+        available_until: editingCategory.available_until || '22:00',
+      } as Category;
+
+      if (isUpdate) {
+        setCategories((prev) => {
+          const updated = prev.map((c) => (c.id === savedCat.id ? savedCat : c));
+          try { localStorage.setItem('hyperlocal_cached_categories', JSON.stringify(updated)); } catch (_) {}
+          return updated;
+        });
+        success(`Cập nhật danh mục "${savedCat.name}" thành công!`);
       } else {
-        alert('Không thể lưu danh mục. Vui lòng thử lại!');
-        await loadData(false);
+        setCategories((prev) => {
+          const updated = [savedCat, ...prev.filter((c) => c.id !== savedCat.id)];
+          try { localStorage.setItem('hyperlocal_cached_categories', JSON.stringify(updated)); } catch (_) {}
+          return updated;
+        });
+        setCurrentPage(1); // Chuyển ngay về trang 1 để người dùng thấy mục mới tạo ở đầu!
+        success(`Đã thêm danh mục mới "${savedCat.name}" vào đầu thực đơn!`);
       }
+
+      // Sync background với backend
+      loadData(false, true);
     } catch (e: any) {
       console.error(e);
-      alert(`Lỗi khi lưu danh mục: ${e?.message || 'Vui lòng kiểm tra lại thông tin.'}`);
-      await loadData(false);
+      error(`Lỗi khi lưu danh mục: ${e?.message || 'Vui lòng kiểm tra lại thông tin.'}`);
     }
   };
 
@@ -130,28 +203,35 @@ export function CategoriesPage() {
     }
 
     if (window.confirm(confirmMsg)) {
-      // Optimistic delete: instantly remove from UI
+      // Optimistic delete: xoá ngay khỏi giao diện
       const prevCats = [...categories];
-      setCategories(prev => prev.filter(c => c.id !== cat.id));
+      setCategories((prev) => {
+        const updated = prev.filter((c) => c.id !== cat.id);
+        try { localStorage.setItem('hyperlocal_cached_categories', JSON.stringify(updated)); } catch (_) {}
+        return updated;
+      });
 
       try {
         const ok = await dbService.deleteCategory(cat.id);
         if (ok) {
-          loadData(false);
+          success(`Đã xoá danh mục "${cat.name}" thành công!`);
+          loadData(false, true);
         } else {
           setCategories(prevCats);
-          alert('Không thể xóa danh mục. Vui lòng thử lại!');
+          error('Không thể xóa danh mục. Vui lòng thử lại!');
         }
       } catch (e: any) {
         console.error(e);
         setCategories(prevCats);
-        alert(`Lỗi khi xóa danh mục: ${e?.message || 'Vui lòng thử lại sau.'}`);
+        error(`Lỗi khi xóa danh mục: ${e?.message || 'Vui lòng thử lại sau.'}`);
       }
     }
   };
 
-  const totalPages = Math.ceil(categories.length / itemsPerPage);
-  const paginatedCategories = categories.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  // Sắp xếp: Ưu tiên mục mới nhất lên ĐẦU DANH SÁCH (ID giảm dần)
+  const sortedCategories = [...categories].sort((a, b) => (Number(b.id) || 0) - (Number(a.id) || 0));
+  const totalPages = Math.ceil(sortedCategories.length / itemsPerPage) || 1;
+  const paginatedCategories = sortedCategories.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-6">
@@ -173,7 +253,7 @@ export function CategoriesPage() {
               description: '',
               image_url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=300',
               icon_emoji: '🍲',
-              sort_order: categories.length + 1,
+              sort_order: 1,
               is_active: true,
               available_from: '06:00',
               available_until: '22:00',
@@ -184,8 +264,19 @@ export function CategoriesPage() {
       />
 
       {/* Card Grid view */}
-      {loading ? (
-        <div className="text-center py-12 text-slate-400 text-xs">Đang tải danh mục...</div>
+      {loading && categories.length === 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+          {[1, 2, 3, 4, 5, 6].map((n) => (
+            <div key={n} className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm animate-pulse">
+              <div className="h-44 bg-slate-200" />
+              <div className="p-4 space-y-3">
+                <div className="h-4 bg-slate-200 rounded w-1/3" />
+                <div className="h-5 bg-slate-200 rounded w-2/3" />
+                <div className="h-3 bg-slate-200 rounded w-full" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : categories.length === 0 ? (
         <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500 text-xs">
           Chưa có danh mục nào. Hãy bấm "Tạo Danh Mục Mới" để bắt đầu.
@@ -193,16 +284,17 @@ export function CategoriesPage() {
       ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-            {paginatedCategories.map((cat) => {
+            {paginatedCategories.map((cat, idx) => {
               const catItemCount = items.filter(
                 (it) => it.category_id === cat.id || (it as any).categoryId === cat.id
               ).length;
+              const displayOrder = (currentPage - 1) * itemsPerPage + idx + 1;
               return (
                 <div key={cat.id} className="h-full">
                   <CardGridItem
                     className="h-full"
                     image={cat.image_url}
-                    categoryOverlay={`Thứ tự: #${cat.sort_order} • ${catItemCount} món`}
+                    categoryOverlay={`Vị trí: #${displayOrder} • ${catItemCount} món`}
                     statusText={cat.is_active ? 'ACTIVE' : 'INACTIVE'}
                     subBadge={cat.available_from && cat.available_until ? `⏰ Khung giờ: ${cat.available_from} - ${cat.available_until}` : '⏰ Cả ngày'}
                     title={`${cat.icon_emoji || '📁'} ${cat.name}`}
@@ -289,25 +381,24 @@ export function CategoriesPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">URL Hình đại diện:</label>
-              <input
-                type="text"
-                value={editingCategory.image_url || ''}
-                onChange={(e) => setEditingCategory((prev) => ({ ...prev, image_url: e.target.value }))}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Thứ tự hiển thị (sort_order):</label>
-              <input
-                type="number"
-                value={editingCategory.sort_order || 1}
-                onChange={(e) => setEditingCategory((prev) => ({ ...prev, sort_order: Number(e.target.value) }))}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
-              />
-            </div>
+          {/* Chọn ảnh từ thư mục máy tính & lưu CSDL */}
+          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <ImageUploadPicker
+              label="Hình đại diện danh mục"
+              helperText="Chọn file ảnh từ máy tính (ảnh được nén và lưu trực tiếp trên CSDL Neon Postgres)"
+              value={editingCategory.image_url || ''}
+              onChange={(val) => setEditingCategory((prev) => ({ ...prev, image_url: val }))}
+            />
+          </div>
+
+          <div>
+            <label className="block font-medium text-slate-700 mb-1">Thứ tự hiển thị (sort_order):</label>
+            <input
+              type="number"
+              value={editingCategory.sort_order || 1}
+              onChange={(e) => setEditingCategory((prev) => ({ ...prev, sort_order: Number(e.target.value) }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+            />
           </div>
 
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-3">

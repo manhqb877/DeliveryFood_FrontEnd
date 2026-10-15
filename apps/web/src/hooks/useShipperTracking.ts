@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { Client } from '@stomp/stompjs';
+import { useState, useEffect, useRef } from "react";
+import { Client } from "@stomp/stompjs";
 // @ts-ignore
-import SockJS from 'sockjs-client/dist/sockjs';
+import SockJS from "sockjs-client/dist/sockjs";
 
 interface ShipperLocation {
   shipperId: number;
@@ -10,6 +10,8 @@ interface ShipperLocation {
   deliveryId?: number;
   updatedAt?: string;
   message?: string;
+  heading?: number;
+  speed?: number;
 }
 
 export function useShipperTracking(shipperId: number | null | undefined) {
@@ -17,29 +19,46 @@ export function useShipperTracking(shipperId: number | null | undefined) {
   const [isConnected, setIsConnected] = useState(false);
   const clientRef = useRef<Client | null>(null);
 
-  // Fetch initial location
+  // Polling location fallback every 3s
   useEffect(() => {
-    if (!shipperId) return;
-    
-    const fetchInitialLocation = async () => {
+    if (!shipperId) {
+      setLocation(null);
+      setIsConnected(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchCurrentLocation = async () => {
       try {
-        // Primary: fetch via API Gateway (Port 8080) which has full CORS support
-        let res = await fetch(`http://localhost:8080/api/v1/tracking/shippers/${shipperId}/location`);
-        if (!res.ok && res.status !== 404) {
-          res = await fetch(`http://localhost:8084/tracking/shippers/${shipperId}/location`).catch(() => null as any);
+        let res = await fetch(`http://localhost:8080/api/v1/tracking/shippers/${shipperId}/location`, {
+          headers: { "ngrok-skip-browser-warning": "true" }
+        }).catch(() => null);
+        if (!res || !res.ok) {
+          res = await fetch(`http://localhost:8084/tracking/shippers/${shipperId}/location`).catch(() => null);
         }
-        if (res && res.ok) {
+        if (res && res.ok && isMounted) {
           const data = await res.json();
-          setLocation(data);
+          if (data && data.lat && data.lng) {
+            setLocation(data);
+            setIsConnected(true);
+          }
         }
       } catch (e) {
         // Shipper may be offline or hasn't pushed GPS yet
       }
     };
-    
-    fetchInitialLocation();
+
+    fetchCurrentLocation();
+    const interval = setInterval(fetchCurrentLocation, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [shipperId]);
 
+  // Real-time STOMP WebSocket push
   useEffect(() => {
     if (!shipperId) {
       if (clientRef.current) {
@@ -48,41 +67,39 @@ export function useShipperTracking(shipperId: number | null | undefined) {
       return;
     }
 
-    // Connect to tracking-service WebSocket
     const client = new Client({
-      webSocketFactory: () => new SockJS('http://localhost:8084/ws'),
-      debug: function (str) {
-        console.log('[STOMP]', str);
+      webSocketFactory: () => {
+        const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+        const url = typeof window !== 'undefined' && (window.location.protocol === 'https:' || host.includes('ngrok'))
+          ? 'https://unentwined-johanne-biasedly.ngrok-free.dev/ws'
+          : `http://${host}:8080/ws`;
+        return new SockJS(url);
       },
+      debug: function () {},
       reconnectDelay: 5000,
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
     });
 
     client.onConnect = () => {
-      console.log('Connected to STOMP for shipper:', shipperId);
       setIsConnected(true);
-      
-      // Subscribe to the shipper's location topic
       client.subscribe(`/topic/shippers/${shipperId}`, (message) => {
         if (message.body) {
           try {
             const loc = JSON.parse(message.body);
-            setLocation(loc);
+            if (loc && loc.lat && loc.lng) {
+              setLocation(loc);
+              setIsConnected(true);
+            }
           } catch (e) {
-            console.error('Failed to parse STOMP message:', e);
+            console.error("Failed to parse STOMP message:", e);
           }
         }
       });
     };
 
     client.onStompError = (frame) => {
-      console.error('Broker reported error: ' + frame.headers['message']);
-      console.error('Additional details: ' + frame.body);
-    };
-
-    client.onWebSocketClose = () => {
-      setIsConnected(false);
+      console.warn("STOMP broker notice:", frame.headers["message"]);
     };
 
     client.activate();

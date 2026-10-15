@@ -38,6 +38,8 @@ const customerIcon = new L.Icon({
 
 export const VIETMAP_API_KEY = '809bdd000025b62b0e9710b82e28f65f6178ee698cdb1845';
 
+const dashboardRouteCache = new Map<string, [number, number][]>();
+
 interface ShipperTrackingMapProps {
   shipperId?: number;
   pickupLocation?: { lat: number; lng: number };
@@ -81,18 +83,53 @@ export function ShipperTrackingMap({ shipperId, pickupLocation, deliveryLocation
         to = deliveryLocation;
       }
 
-      if (from && to) {
+      if (from?.lat && to?.lat) {
+        const key = `${from.lat.toFixed(4)}_${from.lng.toFixed(4)}_${to.lat.toFixed(4)}_${to.lng.toFixed(4)}`;
+        if (dashboardRouteCache.has(key)) {
+          setRouteCoords(dashboardRouteCache.get(key)!);
+          return;
+        }
+
         try {
           const url = `https://maps.vietmap.vn/api/route?api-version=1.1&apikey=${VIETMAP_API_KEY}&point=${from.lat},${from.lng}&point=${to.lat},${to.lng}&vehicle=motorcycle&points_encoded=false`;
           const res = await fetch(url);
-          const data = await res.json();
-          if (data && data.paths && data.paths.length > 0) {
-            const coords = data.paths[0].points.coordinates.map((c: any) => [c[1], c[0]]);
-            setRouteCoords(coords);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.paths && data.paths.length > 0) {
+              const coords = data.paths[0].points.coordinates.map((c: any) => [c[1], c[0]]);
+              dashboardRouteCache.set(key, coords);
+              setRouteCoords(coords);
+              return;
+            }
           }
         } catch (e) {
           console.warn('Vietmap fetch error', e);
         }
+
+        // Dự phòng OSRM khi VietMap gặp 429
+        try {
+          const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`;
+          const oRes = await fetch(osrmUrl);
+          if (oRes.ok) {
+            const oData = await oRes.json();
+            if (oData && oData.routes && oData.routes.length > 0 && oData.routes[0].geometry?.coordinates) {
+              const coords = oData.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]);
+              dashboardRouteCache.set(key, coords);
+              setRouteCoords(coords);
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('OSRM fetch error', e);
+        }
+
+        // Dự phòng toạ độ nội suy
+        const fb: [number, number][] = [];
+        for (let i = 0; i <= 20; i++) {
+          fb.push([from.lat + (to.lat - from.lat) * (i / 20), from.lng + (to.lng - from.lng) * (i / 20)]);
+        }
+        dashboardRouteCache.set(key, fb);
+        setRouteCoords(fb);
       }
     };
     getRoute();

@@ -87,16 +87,32 @@ export default function OrderHeader() {
     const timer = setTimeout(async () => {
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
       try {
-        let res = await fetch(`${API_BASE}/core/items/search?keyword=${encodeURIComponent(trimmed)}`, {
-          signal: controller.signal,
-          headers: { "ngrok-skip-browser-warning": "true" }
-        });
-        if (!res.ok && API_BASE.includes("ngrok")) {
-          res = await fetch(`http://localhost:8080/api/v1/core/items/search?keyword=${encodeURIComponent(trimmed)}`, {
-            signal: controller.signal
+        let res;
+        try {
+          res = await fetch(`${API_BASE}/core/items/search?keyword=${encodeURIComponent(trimmed)}`, {
+            signal: controller.signal,
+            headers: { "ngrok-skip-browser-warning": "true" }
           });
+          if (!res.ok && !API_BASE.includes("localhost:8080")) {
+            res = await fetch(`http://localhost:8080/api/v1/core/items/search?keyword=${encodeURIComponent(trimmed)}`, {
+              signal: controller.signal
+            });
+          }
+        } catch (fetchErr) {
+          if (fetchErr.name === "AbortError") throw fetchErr;
+          if (!API_BASE.includes("localhost:8080")) {
+            try {
+              res = await fetch(`http://localhost:8080/api/v1/core/items/search?keyword=${encodeURIComponent(trimmed)}`, {
+                signal: controller.signal
+              });
+            } catch (fallbackErr) {
+              throw fetchErr;
+            }
+          } else {
+            throw fetchErr;
+          }
         }
-        if (res.ok) {
+        if (res && res.ok) {
           const data = await res.json();
           const results = Array.isArray(data) ? data : (data.data || []);
           searchCacheRef.current.set(trimmed, results);
@@ -142,8 +158,8 @@ export default function OrderHeader() {
               className="group flex items-center gap-3 cursor-pointer w-full relative h-full select-none bg-transparent border-0"
             >
               <Bars3Icon className="w-6 h-6 text-gray-800 shrink-0" />
-              <span className="text-[15px] font-bold text-[#333333] hidden sm:block whitespace-nowrap">
-                Danh mục sản phẩm
+              <span className="text-[15px] font-bold text-[#333333] hidden sm:block whitespace-nowrap" suppressHydrationWarning>
+                {t('nav_categories', 'Danh mục sản phẩm')}
               </span>
             </button>
           </div>
@@ -177,7 +193,7 @@ export default function OrderHeader() {
                 setShowSearch(true);
               }}
               onFocus={() => setShowSearch(true)}
-              placeholder={t('header_search_placeholder', 'Tìm kiếm theo sản phẩm...')}
+              placeholder={t('header_search_placeholder', 'Tìm kiếm món ăn, quán ăn...')}
               className="w-full bg-[#f3f4f6] rounded-[20px] pl-6 pr-12 py-2 text-[13px] text-gray-700 outline-none focus:ring-1 focus:ring-[var(--color-primary)] transition-all border border-gray-200"
             />
             <button className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center bg-[var(--color-primary)]/20 rounded-full text-[var(--color-primary-dark)] shadow-sm hover:bg-[var(--color-primary)] hover:text-black transition-colors z-10">
@@ -327,8 +343,8 @@ export default function OrderHeader() {
               <PhoneIcon className="w-4 h-4" />
             </div>
             <div className="flex flex-col text-right">
-              <span className="text-[10px] font-bold text-gray-500 uppercase leading-none">
-                {t('header_delivery', 'Giao tận nơi')}
+              <span className="text-[10px] font-bold text-gray-500 uppercase leading-none" suppressHydrationWarning>
+                {t('header_delivery', 'GIAO TẬN NƠI')}
               </span>
               <span className="text-[14px] font-black text-gray-800 leading-tight">1900 1755</span>
             </div>
@@ -354,13 +370,13 @@ export default function OrderHeader() {
                   <span className="text-[11px] text-gray-700 font-bold leading-tight max-w-[90px] truncate">
                     {user.fullName || user.phone}
                   </span>
-                  <span className="text-[11px] font-normal text-gray-500 leading-tight">
+                  <span className="text-[11px] font-normal text-gray-500 leading-tight" suppressHydrationWarning>
                     {user.role === 'CUSTOMER'
-                      ? 'Khách hàng'
+                      ? t('role_customer', 'Khách hàng')
                       : user.role === 'SHOP_MANAGER'
-                      ? 'Chủ quán'
+                      ? t('role_shop_manager', 'Chủ quán')
                       : user.role === 'SHIPPER'
-                      ? 'Tài xế'
+                      ? t('role_shipper', 'Tài xế')
                       : user.role}
                   </span>
                 </div>
@@ -410,8 +426,8 @@ export default function OrderHeader() {
                 <UserCircleIcon className="w-5 h-5" />
               </div>
               <div className="hidden lg:flex flex-col text-left">
-                <span className="text-[11px] text-gray-700 font-bold leading-tight">{t('header_account', 'Tài khoản')}</span>
-                <span className="text-[11px] font-normal text-gray-500 leading-tight">{t('header_login', 'Đăng nhập')}</span>
+                <span className="text-[11px] text-gray-700 font-bold leading-tight" suppressHydrationWarning>{t('header_account', 'Tài khoản')}</span>
+                <span className="text-[11px] font-normal text-gray-500 leading-tight" suppressHydrationWarning>{t('header_login', 'Đăng nhập')}</span>
               </div>
             </Link>
           )}
@@ -422,7 +438,7 @@ export default function OrderHeader() {
             className="hidden sm:flex items-center gap-1.5 px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[#1a1a1a] rounded-full font-bold text-[13px] transition-all h-[36px] cursor-pointer shadow-sm group"
           >
             <TruckIcon className="w-4 h-4" />
-            <span>{t('header_track_order', 'Tra cứu đơn')}</span>
+            <span suppressHydrationWarning>{t('header_track_order', 'Tra cứu đơn')}</span>
           </Link>
 
           {/* Cart Icon */}
@@ -431,7 +447,7 @@ export default function OrderHeader() {
             className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-[#1a1a1a] rounded-full transition-colors h-[36px] cursor-pointer shadow-sm group"
           >
             <ShoppingCartIcon className="w-4 h-4 text-[#1a1a1a]" />
-            <span className="text-[13px] font-bold text-[#1a1a1a] hidden sm:inline">{t('header_cart', 'Giỏ hàng')}</span>
+            <span className="text-[13px] font-bold text-[#1a1a1a] hidden sm:inline" suppressHydrationWarning>{t('header_cart', 'Giỏ hàng')}</span>
             <span className="bg-white/80 group-hover:bg-white text-black text-[12px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center transition-colors">
               {totalItemCount}
             </span>
@@ -450,15 +466,15 @@ export default function OrderHeader() {
               <span className="w-full h-[2px] bg-black block"></span>
               <span className="w-full h-[2px] bg-black block"></span>
             </div>
-            <span className="text-[14px] font-bold text-black capitalize">{t('nav_categories', 'Danh mục sản phẩm')}</span>
+            <span className="text-[14px] font-bold text-black capitalize" suppressHydrationWarning>{t('nav_categories', 'Danh mục sản phẩm')}</span>
           </div>
 
           <Link href="/policy" className="flex items-center text-black hover:opacity-80 transition-opacity">
-            <span className="text-[13px] font-bold">{t('nav_policy', 'Chính sách đặt hàng')}</span>
+            <span className="text-[13px] font-bold" suppressHydrationWarning>{t('nav_policy', 'Chính sách đặt hàng')}</span>
           </Link>
 
           <Link href="/contact" className="flex items-center text-black hover:opacity-80 transition-opacity">
-            <span className="text-[13px] font-bold">{t('nav_contact', 'Liên hệ')}</span>
+            <span className="text-[13px] font-bold" suppressHydrationWarning>{t('nav_contact', 'Liên hệ')}</span>
           </Link>
         </div>
       </div>

@@ -88,7 +88,7 @@ export default function OrderFooter() {
               <div className="relative flex items-center">
                 <input
                   type="email"
-                  placeholder="Nhập email của bạn..."
+                  placeholder={t('footer_email_placeholder', 'Nhập email của bạn...')}
                   className="w-full bg-gray-900 border border-gray-700 rounded-xl px-3.5 py-2.5 pr-10 text-xs text-white placeholder-gray-500 outline-none focus:border-[var(--color-primary)] transition-all"
                   required
                 />
@@ -106,11 +106,11 @@ export default function OrderFooter() {
 
         {/* BOTTOM COPYRIGHT */}
         <div className="mt-12 pt-6 border-t border-gray-800/80 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-gray-500 font-medium">
-          <p>© 2026 beFood - Be Group. {t('footer_rights', 'Mọi quyền được bảo lưu.')}</p>
+          <p suppressHydrationWarning>© 2026 beFood - Be Group. {t('footer_rights', 'Mọi quyền được bảo lưu.')}</p>
           <div className="flex items-center gap-6">
-            <span className="flex items-center gap-1.5 text-gray-400">
+            <span className="flex items-center gap-1.5 text-gray-400" suppressHydrationWarning>
               <ShieldCheckIcon className="w-4 h-4 text-emerald-500" />
-              100% An toàn & Bảo mật
+              {t('footer_secure', '100% An toàn & Bảo mật')}
             </span>
           </div>
         </div>

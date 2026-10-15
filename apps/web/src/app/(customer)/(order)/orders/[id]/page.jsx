@@ -38,10 +38,14 @@ export default function OrderDetailsPage() {
   useEffect(() => {
     if (params.id) {
       fetchOrderDetails(params.id);
+      const interval = setInterval(() => {
+        fetchOrderDetails(params.id, true);
+      }, 3000);
+      return () => clearInterval(interval);
     }
   }, [params.id]);
 
-  const fetchOrderDetails = async (orderId) => {
+  const fetchOrderDetails = async (orderId, isPolling = false) => {
     try {
       // Lấy từ authService hoặc TOKEN_KEYS
       let token = null;
@@ -88,14 +92,20 @@ export default function OrderDetailsPage() {
         } catch (e) {
           console.warn('Could not fetch delivery data:', e);
         }
-      } else {
+      } else if (!isPolling) {
         setError('Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn này.');
       }
-      checkReview(orderId);
+      if (!isPolling) {
+        checkReview(orderId);
+      }
     } catch (err) {
-      setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      if (!isPolling) {
+        setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại');
+      }
     } finally {
-      setLoading(false);
+      if (!isPolling) {
+        setLoading(false);
+      }
     }
   };
 
@@ -323,7 +333,7 @@ export default function OrderDetailsPage() {
         </div>
 
         {/* Vị trí Shipper (hiện khi đang lấy hàng hoặc đang giao) */}
-        {order.orderStatus !== 'CANCELLED' && ['PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'DELIVERING'].includes(order.orderStatus) && deliveryData?.shipperId && (
+        {order.orderStatus !== 'CANCELLED' && ['CONFIRMED', 'PREPARING', 'READY_FOR_PICKUP', 'ASSIGNED', 'PICKED_UP', 'DELIVERING'].includes(order.orderStatus) && deliveryData && (
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
             <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
               <MapPin className="w-5 h-5 text-red-600" />
@@ -334,8 +344,29 @@ export default function OrderDetailsPage() {
                 shipperId={deliveryData.shipperId}
                 pickupLocation={{ lat: deliveryData.pickupLat || 10.7769, lng: deliveryData.pickupLng || 106.7009 }}
                 deliveryLocation={{ lat: deliveryData.deliveryLat || 10.7800, lng: deliveryData.deliveryLng || 106.7050 }}
+                pickup2Location={deliveryData.pickup2Lat ? { lat: deliveryData.pickup2Lat, lng: deliveryData.pickup2Lng } : undefined}
+                isMultiShop={Boolean(deliveryData.isMultiShop || deliveryData.pickup2Lat)}
+                shop1Name={deliveryData.shop1Name || order.shopName}
+                shop2Name={deliveryData.shop2Name}
+                pickup1Completed={deliveryData.pickup1Completed}
+                pickup2Completed={deliveryData.pickup2Completed}
+                optimalPickupOrder={deliveryData.optimalPickupOrder}
               />
             </div>
+            {Boolean(deliveryData.isMultiShop || deliveryData.pickup2Lat) && (
+              <div className="mt-2.5 p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between text-xs text-purple-700 font-semibold">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 bg-purple-200 text-purple-800 rounded font-extrabold text-[10px]">ĐƠN 2 QUÁN</span>
+                  <span>
+                    {deliveryData.pickup1Completed && deliveryData.pickup2Completed
+                      ? '✅ Shipper đã lấy đủ món cả 2 quán, đang giao đến bạn!'
+                      : deliveryData.pickup1Completed || deliveryData.pickup2Completed
+                      ? '🛵 Shipper đã gom xong 1/2 quán, đang ghé quán thứ 2!'
+                      : '🛵 Shipper đang di chuyển đến các quán để lấy hàng'}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
