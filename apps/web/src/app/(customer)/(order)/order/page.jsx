@@ -42,9 +42,32 @@ function OrderContent() {
     const fetchShops = async () => {
       setLoading(true);
       setErrorMsg('');
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+      const configuredUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+      const apiUrl = (typeof window !== 'undefined' && window.location.hostname === 'localhost' && configuredUrl.includes('ngrok'))
+        ? 'http://localhost:8080/api/v1'
+        : configuredUrl;
+
       try {
-        const response = await fetch(`${apiUrl}/core/shops`, { cache: 'no-store' });
+        let response;
+        try {
+          response = await fetch(`${apiUrl}/core/shops`, {
+            cache: 'no-store',
+            headers: {
+              'ngrok-skip-browser-warning': 'true',
+              'Accept': 'application/json',
+            },
+          });
+        } catch (fetchErr) {
+          if (!apiUrl.includes('localhost:8080')) {
+            response = await fetch('http://localhost:8080/api/v1/core/shops', {
+              cache: 'no-store',
+              headers: { 'Accept': 'application/json' },
+            });
+          } else {
+            throw fetchErr;
+          }
+        }
+
         if (!response.ok) {
           throw new Error(`Máy chủ phản hồi mã lỗi ${response.status}`);
         }
@@ -93,8 +116,31 @@ function OrderContent() {
       setErrorMsg('');
       setShopDetails(null);
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
-        const response = await fetch(`${apiUrl}/core/shops/${selectedShopId}/details`, { cache: 'no-store' });
+        const configuredUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+        const apiUrl = (typeof window !== 'undefined' && window.location.hostname === 'localhost' && configuredUrl.includes('ngrok'))
+          ? 'http://localhost:8080/api/v1'
+          : configuredUrl;
+
+        let response;
+        try {
+          response = await fetch(`${apiUrl}/core/shops/${selectedShopId}/details`, {
+            cache: 'no-store',
+            headers: {
+              'ngrok-skip-browser-warning': 'true',
+              'Accept': 'application/json',
+            },
+          });
+        } catch (fetchErr) {
+          if (!apiUrl.includes('localhost:8080')) {
+            response = await fetch(`http://localhost:8080/api/v1/core/shops/${selectedShopId}/details`, {
+              cache: 'no-store',
+              headers: { 'Accept': 'application/json' },
+            });
+          } else {
+            throw fetchErr;
+          }
+        }
+
         const data = await response.json();
 
         if (!response.ok || data.error || !data.categories) {

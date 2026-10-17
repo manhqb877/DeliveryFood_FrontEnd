@@ -29,7 +29,9 @@ export default function CartPage() {
 
     setCheckingShop(true);
     try {
-      const res = await fetch(`${API}/core/shops/${activeCart.shopId}/details`);
+      const res = await fetch(`${API}/core/shops/${activeCart.shopId}/details`, {
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
       if (res.ok) {
         const shop = await res.json();
         if (shop?.isOpen === false || shop?.isAcceptingOrders === false) {
