@@ -276,10 +276,24 @@ function ShipperRemittancesList({ shopId, shipperId }: { shopId: number, shipper
         </tr>
       </thead>
       <tbody className="divide-y divide-slate-100">
-        {remittances.map(r => (
-          <tr key={r.id} className="hover:bg-slate-50 transition-colors">
-            <td className="p-4 font-medium text-slate-800">{r.orderCode}</td>
-            <td className="p-4 font-bold text-amber-600">{r.amount.toLocaleString()}đ</td>
+        {remittances.map(r => {
+          const isMulti = r.isMultiShop || r.shop2Id != null;
+          const displayAmount = isMulti
+            ? (r.shop2Id === shopId ? (r.shop2Amount || Math.round(r.amount / 2)) : (r.shop1Amount || Math.round(r.amount / 2)))
+            : (r.shop1Amount || r.amount);
+          return (
+            <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+              <td className="p-4 font-medium text-slate-800">
+                <div className="flex items-center gap-1.5">
+                  <span>{r.orderCode}</span>
+                  {isMulti && (
+                    <span className="px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 font-semibold rounded">
+                      Đơn ghép
+                    </span>
+                  )}
+                </div>
+              </td>
+              <td className="p-4 font-bold text-amber-600">{Number(displayAmount || 0).toLocaleString()}đ</td>
             <td className="p-4">
               {r.status === 'PENDING' ? (
                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 text-amber-700 text-xs font-semibold">
@@ -309,7 +323,8 @@ function ShipperRemittancesList({ shopId, shipperId }: { shopId: number, shipper
               )}
             </td>
           </tr>
-        ))}
+        );
+      })}
       </tbody>
     </table>
   );

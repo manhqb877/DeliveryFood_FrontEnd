@@ -288,12 +288,25 @@ function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDeta
           </div>
         )}
         {isPreparing && (
-          <button
-            onClick={onReady}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
-          >
-            <PackageCheck className="w-3.5 h-3.5" /> Báo Món Đã Sẵn Sàng
-          </button>
+          <div className="flex flex-col gap-2">
+            {order.isMultiShop && (
+              order.shop1Confirmed && order.shop2Confirmed ? (
+                <div className="py-1.5 px-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Cả 2 quán đã duyệt — Đang điều phối Shipper
+                </div>
+              ) : (
+                <div className="py-1.5 px-2 bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" /> Đã xác nhận món — Chờ quán thứ 2 xác nhận
+                </div>
+              )
+            )}
+            <button
+              onClick={onReady}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <PackageCheck className="w-3.5 h-3.5" /> Báo Món Đã Sẵn Sàng
+            </button>
+          </div>
         )}
         {isReady && (
           <div className="flex flex-col gap-2">
@@ -327,6 +340,7 @@ function OrderCard({ order, onConfirm, onReady, onHandover, onReject, onViewDeta
 // Main Page
 // =============================================
 export function ShopOrdersPage() {
+  const [currentShop, setCurrentShop] = useState<any>(null);
   const [orders, setOrders] = useState<Order[]>(() => (dbService as any).getCachedOrders?.() || []);
   const [loading, setLoading] = useState(() => !((dbService as any).getCachedOrders?.()?.length));
   const [activeTab, setActiveTab] = useState<'NEW' | 'PREPARING' | 'READY' | 'HISTORY'>('NEW');
@@ -349,6 +363,7 @@ export function ShopOrdersPage() {
   const loadOrders = useCallback(async (forceRefresh = false) => {
     const myShop = await dbService.getMyShop();
     const currentShopId = myShop?.id || 1;
+    setCurrentShop(myShop);
     const list = await dbService.getOrders({ shop_id: currentShopId, forceRefresh });
     setOrders(list);
     setLastPollTime(new Date());
@@ -405,7 +420,11 @@ export function ShopOrdersPage() {
     setTransitioning(orderId);
     await new Promise(r => setTimeout(r, 300)); // brief visual transition
     try {
-      await dbService.updateOrderStatus(orderId, nextStatus, 'SHOP_MANAGER', reason);
+      const activeShop = currentShop || (await dbService.getMyShop());
+      const shopId = activeShop?.id || 1;
+      const targetOrder = orders.find(o => o.id === orderId);
+
+      await dbService.updateOrderStatus(orderId, nextStatus, 'SHOP_MANAGER', reason, shopId);
       
       // Auto-switch to next progress stage as user requested ("xác nhận xong chuyển tiến trình")
       if (targetTab) {
@@ -414,7 +433,11 @@ export function ShopOrdersPage() {
       } else if (nextStatus === 'CONFIRMED' || nextStatus === 'PREPARING') {
         setActiveTab('PREPARING');
         setCurrentPage(1);
-        showToast('✓ Đã xác nhận đơn hàng thành công! Đơn đã chuyển sang tiến trình "Đang Nấu".');
+        if (targetOrder?.isMultiShop) {
+          showToast('✓ Đã xác nhận món thành công! Đang chờ quán còn lại xác nhận trước khi điều phối Shipper.');
+        } else {
+          showToast('✓ Đã xác nhận đơn hàng thành công! Đơn đã chuyển sang tiến trình "Đang Nấu".');
+        }
       } else if (nextStatus === 'READY_FOR_PICKUP') {
         setActiveTab('READY');
         setCurrentPage(1);
@@ -431,7 +454,7 @@ export function ShopOrdersPage() {
     } catch (e) {
       console.error('Error updating status:', e);
     } finally {
-      await loadOrders();
+      await loadOrders(true);
       setTransitioning(null);
     }
   };
