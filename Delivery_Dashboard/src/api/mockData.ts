@@ -192,6 +192,13 @@ export interface Order {
   customer_phone: string;
   shop_id: number;
   shop_name: string;
+  shop2_id?: number;
+  shop2_name?: string;
+  isMultiShop?: boolean;
+  shop1_confirmed?: boolean;
+  shop2_confirmed?: boolean;
+  shop1Confirmed?: boolean;
+  shop2Confirmed?: boolean;
   area_id: number;
   delivery_address: {
     building: string;

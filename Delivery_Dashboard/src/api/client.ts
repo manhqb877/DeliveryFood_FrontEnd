@@ -1446,6 +1446,11 @@ export const dbService = {
               customer_phone: d.deliveryAddress?.phoneNumber || d.deliveryAddress?.recipientPhone || d.deliveryAddress?.recipient_phone || '',
               shop_id: d.shopId,
               shop_name: d.shopName || `Shop #${d.shopId}`,
+              shop2_id: d.shop2Id,
+              shop2_name: d.shop2Name,
+              isMultiShop: d.isMultiShop,
+              shop1Confirmed: d.shop1Confirmed,
+              shop2Confirmed: d.shop2Confirmed,
               area_id: 1, // mock area
               delivery_address: {
                 building: d.deliveryAddress?.address || d.deliveryAddress?.fullAddress || d.deliveryAddress?.building || '',
@@ -1582,7 +1587,7 @@ export const dbService = {
     return [];
   },
 
-  updateOrderStatus: async (orderId: number, newStatus: Order['order_status'], actor: string, reason?: string) => {
+  updateOrderStatus: async (orderId: number, newStatus: Order['order_status'], actor: string, reason?: string, shopId?: number) => {
     // Optimistically update memory cache immediately
     if ((dbService as any)._cachedOrders) {
       Object.keys((dbService as any)._cachedOrders).forEach(k => {
@@ -1602,7 +1607,8 @@ export const dbService = {
         body: JSON.stringify({
           status: newStatus,
           cancelReason: reason,
-          actorType: actor
+          actorType: actor,
+          shopId: shopId
         })
       });
     } catch (err) {

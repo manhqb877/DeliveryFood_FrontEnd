@@ -237,23 +237,34 @@ export function ShipperTrackingMap({
 
   // 3. Chặng Shipper xuất phát -> Điểm lấy món 1 (Màu xanh dương) - Đồng bộ 100% chuẩn y hệt AppShipper
   const initialShipperOriginRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastFetchedLocationRef = useRef<{ lat: number; lng: number; time: number } | null>(null);
 
   useEffect(() => {
     const target = isMultiShop ? stop1.location : pickupLocation;
-    if (!target?.lat) return;
+    if (!target?.lat || !target?.lng) return;
 
     if (location?.lat && location?.lng && !initialShipperOriginRef.current) {
       initialShipperOriginRef.current = { lat: location.lat, lng: location.lng };
     }
 
-    const origin = initialShipperOriginRef.current || location || { lat: 10.78033, lng: 106.65691 };
+    const shipLoc = location || initialShipperOriginRef.current || { lat: 10.78033, lng: 106.65691 };
 
-    fetchVietmapRoute(origin, target).then((coords) => {
+    const now = Date.now();
+    if (lastFetchedLocationRef.current) {
+      const prev = lastFetchedLocationRef.current;
+      const moved = Math.abs(prev.lat - shipLoc.lat) + Math.abs(prev.lng - shipLoc.lng);
+      if (now - prev.time < 2500 && moved < 0.0003) {
+        return;
+      }
+    }
+    lastFetchedLocationRef.current = { lat: shipLoc.lat, lng: shipLoc.lng, time: now };
+
+    fetchVietmapRoute(shipLoc, target).then((coords) => {
       if (coords && coords.length > 0) {
         setRouteToShop(coords);
       }
     });
-  }, [isMultiShop, stop1.location?.lat, stop1.location?.lng, pickupLocation?.lat, pickupLocation?.lng]);
+  }, [isMultiShop, stop1.location?.lat, stop1.location?.lng, pickupLocation?.lat, pickupLocation?.lng, location?.lat, location?.lng]);
 
   const defaultCenter: [number, number] = [10.7769, 106.7009];
   const center: [number, number] = location
@@ -313,15 +324,15 @@ export function ShipperTrackingMap({
         />
 
         {routeToShop.length > 0 && (
-          <Polyline positions={routeToShop} color="#3B82F6" weight={5} opacity={0.8} lineCap="round" lineJoin="round" />
+          <Polyline positions={routeToShop} color="#2563EB" weight={6} opacity={0.9} lineCap="round" lineJoin="round" />
         )}
 
         {routeBetweenShops.length > 0 && (
-          <Polyline positions={routeBetweenShops} color="#7C3AED" weight={5} opacity={0.8} lineCap="round" lineJoin="round" />
+          <Polyline positions={routeBetweenShops} color="#7C3AED" weight={5} opacity={0.9} lineCap="round" lineJoin="round" />
         )}
 
         {routeToCustomer.length > 0 && (
-          <Polyline positions={routeToCustomer} color="#F97316" weight={5} opacity={0.8} lineCap="round" lineJoin="round" />
+          <Polyline positions={routeToCustomer} color="#EA580C" weight={5} opacity={0.9} lineCap="round" lineJoin="round" />
         )}
 
         <style>{`
@@ -357,7 +368,7 @@ export function ShipperTrackingMap({
         {isMultiShop && pickup2Location && (
           <Marker position={[pickup2Location.lat, pickup2Location.lng]} icon={shop2Icon}>
             <Tooltip permanent direction="top" offset={[0, -20]} className="custom-tooltip shop2-tooltip">
-              🏪 {shop2Name || 'Quán 2'} (Quán ${shop2Badge})
+              🏪 {isMultiShop ? `${shop2Name || 'Quán 2'} (Quán ${shop2Badge})` : (shop2Name || 'Quán 2')}
             </Tooltip>
             <Popup className="font-semibold text-sm">
               <span className="text-purple-600 font-bold">Điểm lấy món #{shop2Badge}:</span> {shop2Name || 'Quán 2'}
