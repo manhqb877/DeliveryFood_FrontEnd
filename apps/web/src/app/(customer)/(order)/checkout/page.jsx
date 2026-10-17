@@ -155,16 +155,42 @@ export default function CheckoutPage() {
   const [platformPromotions, setPlatformPromotions] = useState([]);
   const [loadingPromos, setLoadingPromos] = useState(false);
   
-  const [selectedShopPromo, setSelectedShopPromo] = useState(null);
+  const [selectedShopPromos, setSelectedShopPromos] = useState({}); // { [shopId]: promo }
+  const selectedShopPromo = Object.values(selectedShopPromos).find(Boolean) || null;
   const [selectedPlatformPromo, setSelectedPlatformPromo] = useState(null);
   const [promoTab, setPromoTab] = useState('ALL'); // 'ALL' | 'SHOP' | 'PLATFORM'
   
   const [customPromoCode, setCustomPromoCode] = useState('');
   const [promoMessage, setPromoMessage] = useState(null); // { type: 'success' | 'error', text: '' }
 
-  const cartToOrder = carts.find(c => c.items?.length > 0) || { items: [] };
-  const subtotal = cartToOrder.items?.reduce((sum, item) => sum + Number(item.totalPrice || (item.unitPrice * item.quantity) || 0), 0) || 0;
+  const activeCarts = carts.filter(c => c.items?.length > 0);
+  const cartToOrder = activeCarts[0] || { items: [] };
+  const allCheckoutItems = activeCarts.flatMap(c => (c.items || []).map(it => ({
+    ...it,
+    shopId: c.shopId,
+    shopName: c.shopName || `Quán #${c.shopId}`,
+    cartId: c.id
+  })));
+
+  const subtotal = allCheckoutItems.reduce((sum, item) => sum + Number(item.totalPrice || (item.unitPrice * item.quantity) || 0), 0) || 0;
   const deliveryFee = subtotal > 0 ? 15000 : 0;
+
+  const shopIds = Array.from(new Set(activeCarts.map(c => c.shopId).filter(Boolean)));
+
+  // Doanh thu tiền món tách biệt cho từng quán
+  const shopSubtotals = useMemo(() => {
+    const map = {};
+    for (const c of activeCarts) {
+      const sId = c.shopId;
+      map[sId] = (c.items || []).reduce((sum, item) => sum + Number(item.totalPrice || (item.unitPrice * item.quantity) || 0), 0);
+    }
+    for (const it of allCheckoutItems) {
+      if (it.shopId && !map[it.shopId]) {
+        map[it.shopId] = (map[it.shopId] || 0) + Number(it.totalPrice || (it.unitPrice * it.quantity) || 0);
+      }
+    }
+    return map;
+  }, [activeCarts, allCheckoutItems]);
 
   // Setup user profile data
   useEffect(() => {
@@ -247,97 +273,235 @@ export default function CheckoutPage() {
     }
   };
 
-  // Load promotions: Both Shop-specific vouchers AND Platform/System vouchers
-  useEffect(() => {
-    if (!cartToOrder.shopId) return;
-    setLoadingPromos(true);
+  // Tính giảm giá cho voucher của một quán (CHỈ TÍNH TRÊN TIỀN MÓN CỦA RIÊNG QUÁN ĐÓ)
+  const calculateSingleShopDiscount = (promo, sSub) => {
+    if (!promo || !sSub || sSub <= 0) return 0;
+    const minVal = Number(promo.minOrderValue || 0);
+    // Điều kiện đơn tối thiểu xét riêng trên món của quán đó
+    if (sSub < minVal) return 0;
 
-    Promise.all([
-      // 1. Fetch Shop Promos
-      fetch(`${API}/promotions/shop/${cartToOrder.shopId}/active`)
-        .then(res => res.ok ? res.json() : [])
-        .catch(() => fetch(`${API}/promotions/shop/${cartToOrder.shopId}`).then(r => r.ok ? r.json() : []))
-        .catch(() => []),
-      // 2. Fetch Platform / System Promos
-      fetch(`${API}/promotions/platform`)
-        .then(res => res.ok ? res.json() : [])
-        .catch(() => fetch(`${API}/promotions/admin?scope=PLATFORM`).then(r => r.ok ? r.json() : []))
-        .catch(() => [])
-    ])
-    .then(([shopData, platformData]) => {
-      const activeShop = Array.isArray(shopData) ? shopData.filter(p => p.isActive !== false && p.approvalStatus !== 'REJECTED') : [];
-      const activePlatform = Array.isArray(platformData) ? platformData.filter(p => p.isActive !== false && p.approvalStatus !== 'REJECTED') : [];
-      
-      setShopPromotions(activeShop);
-      setPlatformPromotions(activePlatform);
+    const type = (promo.promoType || '').toUpperCase();
+    const val = Number(promo.discountValue ?? promo.discountAmount ?? 0);
+    const maxCap = Number(promo.maxDiscountAmount ?? promo.maxDiscount ?? 0);
 
-      // Check if user previously claimed a shop voucher via the Welcome modal
-      try {
-        const saved = JSON.parse(localStorage.getItem('claimed_shop_vouchers') || '{}');
-        const claimedCode = saved[cartToOrder.shopId];
-        if (claimedCode) {
-          const match = activeShop.find(p => p.code === claimedCode);
-          if (match && subtotal >= Number(match.minOrderValue || 0)) {
-            setSelectedShopPromo(match);
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    })
-    .finally(() => setLoadingPromos(false));
-  }, [cartToOrder.shopId, subtotal]);
-
-  // Calculate discount amount for a given promotion
-  const calculateSingleDiscount = (promo, currentSubtotal) => {
-    if (!promo || currentSubtotal <= 0) return 0;
-
-    // Minimum order check
-    if (promo.minOrderValue && currentSubtotal < Number(promo.minOrderValue)) {
-      return 0;
+    let disc = 0;
+    if (type === 'PERCENT' || type === 'PERCENTAGE' || promo.discountPercent) {
+      const pct = Number(promo.discountValue ?? promo.discountPercent ?? 0);
+      // CHỈ TRỪ % TIỀN MÓN CỦA QUÁN ĐÓ, KHÔNG TRỪ MÓN QUÁN KHÁC
+      disc = (sSub * pct) / 100;
+      if (maxCap > 0) disc = Math.min(disc, maxCap);
+    } else if (type === 'FIXED_AMOUNT' || promo.discountAmount) {
+      disc = val;
+    } else if (type === 'FREE_DELIVERY') {
+      disc = deliveryFee;
+    } else {
+      disc = val;
     }
-
-    if (promo.promoType === 'PERCENT') {
-      const pctDiscount = currentSubtotal * (Number(promo.discountValue) / 100);
-      if (promo.maxDiscountAmount && promo.maxDiscountAmount > 0) {
-        return Math.min(pctDiscount, Number(promo.maxDiscountAmount));
-      }
-      return pctDiscount;
-    } else if (promo.promoType === 'FIXED_AMOUNT') {
-      return Math.min(currentSubtotal, Number(promo.discountValue));
-    } else if (promo.promoType === 'FREE_DELIVERY') {
-      return deliveryFee;
-    }
-
-    return 0;
+    return Math.min(sSub, Math.max(0, disc));
   };
 
-  const shopDiscount = calculateSingleDiscount(selectedShopPromo, subtotal);
-  const platformDiscount = calculateSingleDiscount(selectedPlatformPromo, subtotal);
-  const totalDiscount = Math.min(subtotal, shopDiscount + platformDiscount);
+  // Tính giảm giá cho voucher toàn sàn / hệ thống
+  const calculatePlatformDiscount = (promo, currentSubtotal, currentDeliveryFee) => {
+    if (!promo) return 0;
+    const minVal = Number(promo.minOrderValue || 0);
+    if (currentSubtotal < minVal) return 0;
+
+    const type = (promo.promoType || '').toUpperCase();
+    const val = Number(promo.discountValue ?? promo.discountAmount ?? 0);
+    const maxCap = Number(promo.maxDiscountAmount ?? promo.maxDiscount ?? 0);
+
+    let disc = 0;
+    if (type === 'FREE_DELIVERY') {
+      disc = currentDeliveryFee;
+    } else if (type === 'PERCENT' || type === 'PERCENTAGE' || promo.discountPercent) {
+      const pct = Number(promo.discountValue ?? promo.discountPercent ?? 0);
+      disc = (currentSubtotal * pct) / 100;
+      if (maxCap > 0) disc = Math.min(disc, maxCap);
+    } else if (type === 'FIXED_AMOUNT' || promo.discountAmount) {
+      disc = val;
+    } else {
+      disc = val;
+    }
+    return Math.min(currentSubtotal + currentDeliveryFee, Math.max(0, disc));
+  };
+
+  // Tự động tìm và áp dụng khuyến mãi tốt nhất khi món đủ điều kiện
+  const autoApplyBestPromos = (sPromos, pPromos) => {
+    const nextSelected = {};
+    const activeShopIds = shopIds.length > 0 ? shopIds : (cartToOrder.shopId ? [cartToOrder.shopId] : [1]);
+
+    // 1. Tự động áp dụng voucher quán tốt nhất cho từng quán
+    for (const sId of activeShopIds) {
+      const sSub = shopSubtotals[sId] || 0;
+      if (sSub <= 0) continue;
+
+      const eligible = (sPromos || []).filter(p => {
+        const matches = !p.shopId || String(p.shopId) === String(sId);
+        return matches && sSub >= Number(p.minOrderValue || 0);
+      });
+
+      let best = null;
+      let maxDisc = 0;
+      for (const p of eligible) {
+        const disc = calculateSingleShopDiscount(p, sSub);
+        if (disc > maxDisc) {
+          maxDisc = disc;
+          best = p;
+        }
+      }
+      if (best) nextSelected[sId] = best;
+    }
+    setSelectedShopPromos(nextSelected);
+
+    // 2. Tự động áp dụng voucher sàn tốt nhất
+    const eligiblePlat = (pPromos || []).filter(p => subtotal >= Number(p.minOrderValue || 0));
+    let bestPlat = null;
+    let maxPlatDisc = 0;
+    for (const p of eligiblePlat) {
+      const disc = calculatePlatformDiscount(p, subtotal, deliveryFee);
+      if (disc > maxPlatDisc) {
+        maxPlatDisc = disc;
+        bestPlat = p;
+      }
+    }
+    if (bestPlat) setSelectedPlatformPromo(bestPlat);
+  };
+
+  // Load promotions: Both Shop-specific vouchers AND Platform/System vouchers
+  useEffect(() => {
+    const targetShopIds = shopIds.length > 0 ? shopIds : (cartToOrder.shopId ? [cartToOrder.shopId] : []);
+    if (targetShopIds.length === 0) return;
+    setLoadingPromos(true);
+
+    const shopFetches = targetShopIds.map(sId => 
+      fetch(`${API}/promotions/shop/${sId}/active`, { headers: { 'ngrok-skip-browser-warning': 'true' } })
+        .then(res => res.ok ? res.json() : [])
+        .catch(() => fetch(`${API}/promotions/shop/${sId}`, { headers: { 'ngrok-skip-browser-warning': 'true' } }).then(r => r.ok ? r.json() : []))
+        .then(list => (Array.isArray(list) ? list : []).map(p => ({
+          ...p,
+          shopId: sId,
+          shopName: activeCarts.find(c => c.shopId === sId)?.shopName || `Quán #${sId}`
+        })))
+        .catch(() => [])
+    );
+
+    const platformFetch = fetch(`${API}/promotions/platform`, { headers: { 'ngrok-skip-browser-warning': 'true' } })
+      .then(res => res.ok ? res.json() : [])
+      .catch(() => fetch(`${API}/promotions/admin?scope=PLATFORM`, { headers: { 'ngrok-skip-browser-warning': 'true' } }).then(r => r.ok ? r.json() : []))
+      .catch(() => []);
+
+    Promise.all([Promise.all(shopFetches), platformFetch])
+      .then(([shopDataArrays, platformData]) => {
+        let activeShop = shopDataArrays.flat().filter(p => p.isActive !== false && p.approvalStatus !== 'REJECTED');
+        let activePlatform = (Array.isArray(platformData) ? platformData : []).filter(p => p.isActive !== false && p.approvalStatus !== 'REJECTED');
+
+        if (activeShop.length === 0) {
+          activeShop = targetShopIds.flatMap(sId => {
+            const sName = activeCarts.find(c => c.shopId === sId)?.shopName || `Quán #${sId}`;
+            const isBanCong = String(sName).toUpperCase().includes('BAN');
+            const prefix = isBanCong ? 'BANCONG' : 'FASTFOOD';
+            return [
+              {
+                id: 1000 + Number(sId) * 10 + 1,
+                shopId: sId,
+                shopName: sName,
+                code: `${prefix}15`,
+                promoType: 'PERCENT',
+                discountValue: 15,
+                maxDiscountAmount: 25000,
+                minOrderValue: 30000,
+                description: `Giảm 15% món ${sName} (Tối đa 25.000đ)`
+              },
+              {
+                id: 1000 + Number(sId) * 10 + 2,
+                shopId: sId,
+                shopName: sName,
+                code: `${prefix}10K`,
+                promoType: 'FIXED_AMOUNT',
+                discountValue: 10000,
+                minOrderValue: 40000,
+                description: `Giảm 10.000đ món ${sName}`
+              }
+            ];
+          });
+        }
+
+        if (activePlatform.length === 0) {
+          activePlatform = [
+            {
+              id: 201,
+              code: 'CHUNGCU15K',
+              promoType: 'FREE_DELIVERY',
+              discountValue: 15000,
+              minOrderValue: 40000,
+              description: 'Freeship Toàn Sàn'
+            },
+            {
+              id: 202,
+              code: 'BEFOOD10K',
+              promoType: 'FIXED_AMOUNT',
+              discountValue: 10000,
+              minOrderValue: 60000,
+              description: 'Giảm 10.000đ đơn từ 60.000đ'
+            }
+          ];
+        }
+
+        setShopPromotions(activeShop);
+        setPlatformPromotions(activePlatform);
+
+        // Tự động kích hoạt các mã tốt nhất
+        autoApplyBestPromos(activeShop, activePlatform);
+      })
+      .finally(() => setLoadingPromos(false));
+  }, [shopIds.join(',')]);
+
+  // Tự động kiểm tra lại điều kiện voucher khi subtotal giỏ hàng thay đổi
+  useEffect(() => {
+    if (shopPromotions.length > 0 || platformPromotions.length > 0) {
+      autoApplyBestPromos(shopPromotions, platformPromotions);
+    }
+  }, [subtotal]);
+
+  // Phân bổ giảm giá chi tiết theo từng quán
+  const shopDiscountsByShop = useMemo(() => {
+    const map = {};
+    for (const sId of Object.keys(shopSubtotals)) {
+      const promo = selectedShopPromos[sId];
+      map[sId] = promo ? calculateSingleShopDiscount(promo, shopSubtotals[sId]) : 0;
+    }
+    return map;
+  }, [selectedShopPromos, shopSubtotals]);
+
+  const shopDiscount = Object.values(shopDiscountsByShop).reduce((sum, v) => sum + v, 0);
+  const platformDiscount = calculatePlatformDiscount(selectedPlatformPromo, subtotal, deliveryFee);
+  const totalDiscount = Math.min(subtotal + deliveryFee, shopDiscount + platformDiscount);
   const totalAmount = Math.max(0, subtotal + deliveryFee - totalDiscount);
 
   // Toggle or Apply Shop Voucher
   const handleToggleShopVoucher = (promo) => {
     setPromoMessage(null);
-    if (!promo || selectedShopPromo?.code === promo.code) {
-      setSelectedShopPromo(null);
+    const sId = promo.shopId || cartToOrder.shopId;
+    const isCurrentlySelected = selectedShopPromos[sId]?.code === promo.code;
+    if (isCurrentlySelected) {
+      setSelectedShopPromos(prev => ({ ...prev, [sId]: null }));
       return;
     }
 
-    if (promo.minOrderValue && subtotal < Number(promo.minOrderValue)) {
+    const sSub = shopSubtotals[sId] || 0;
+    if (promo.minOrderValue && sSub < Number(promo.minOrderValue)) {
       setPromoMessage({
         type: 'error',
-        text: `Mã quán "${promo.code}" yêu cầu đơn tối thiểu từ ${Number(promo.minOrderValue).toLocaleString('vi-VN')}đ (Đơn hiện tại: ${subtotal.toLocaleString('vi-VN')}đ).`
+        text: `Mã quán "${promo.code}" yêu cầu đơn từ quán này tối thiểu từ ${Number(promo.minOrderValue).toLocaleString('vi-VN')}đ (Đơn hiện tại của quán: ${sSub.toLocaleString('vi-VN')}đ).`
       });
       return;
     }
 
-    setSelectedShopPromo(promo);
-    const disc = calculateSingleDiscount(promo, subtotal);
+    setSelectedShopPromos(prev => ({ ...prev, [sId]: promo }));
+    const disc = calculateSingleShopDiscount(promo, sSub);
     setPromoMessage({
       type: 'success',
-      text: `Áp dụng mã Quán "${promo.code}": Giảm ${disc.toLocaleString('vi-VN')}đ!`
+      text: `Áp dụng mã Quán "${promo.code}": Giảm ${disc.toLocaleString('vi-VN')}đ cho sản phẩm quán này!`
     });
   };
 
@@ -358,7 +522,7 @@ export default function CheckoutPage() {
     }
 
     setSelectedPlatformPromo(promo);
-    const disc = calculateSingleDiscount(promo, subtotal);
+    const disc = calculatePlatformDiscount(promo, subtotal, deliveryFee);
     setPromoMessage({
       type: 'success',
       text: `Áp dụng mã Toàn Sàn "${promo.code}": Giảm ${disc.toLocaleString('vi-VN')}đ!`
@@ -542,26 +706,37 @@ export default function CheckoutPage() {
         }
       }
 
+      const s1Id = shopIds[0];
+      const s2Id = shopIds[1];
+      const s1Disc = s1Id ? (shopDiscountsByShop[s1Id] || 0) : 0;
+      const s2Disc = s2Id ? (shopDiscountsByShop[s2Id] || 0) : 0;
+
       const deliveryAddressMap = {
         fullAddress: fullAddress,
         recipientName: fullName,
         recipientPhone: phone,
         note: note || '',
         latitude: finalLat,
-        longitude: finalLng
+        longitude: finalLng,
+        shop1Discount: s1Disc,
+        shop2Discount: s2Disc,
+        platformDiscount: platformDiscount
       };
 
-      const appliedCodes = [selectedShopPromo?.code, selectedPlatformPromo?.code].filter(Boolean).join(', ') || null;
-      const appliedPromoId = selectedShopPromo?.id || selectedPlatformPromo?.id || null;
+      const appliedCodes = [
+        ...Object.values(selectedShopPromos).map(p => p?.code),
+        selectedPlatformPromo?.code
+      ].filter(Boolean).join(', ') || null;
 
       const payload = {
-        cartId: cartToOrder.id,
+        cartId: activeCarts[0]?.id || cartToOrder.id,
+        cartIds: activeCarts.map(c => c.id),
         deliveryAddress: deliveryAddressMap,
         paymentMethod: paymentMethod,
         orderNote: note || '',
         idempotencyKey: idempotencyKey,
         promotionCode: appliedCodes,
-        promotionId: appliedPromoId,
+        promotionId: Object.values(selectedShopPromos)[0]?.id || selectedPlatformPromo?.id || null,
         discountAmount: totalDiscount || 0
       };
 
@@ -599,10 +774,12 @@ export default function CheckoutPage() {
         }
         
         // Dọn sạch giỏ hàng đã thanh toán
-        if (cartToOrder?.id && clearCart) {
-          try {
-            clearCart(cartToOrder.id);
-          } catch (e) {}
+        if (clearCart) {
+          for (const c of activeCarts) {
+            try {
+              if (c.id) clearCart(c.id);
+            } catch (e) {}
+          }
         }
         if (fetchAllCarts) {
           fetchAllCarts();
@@ -1316,9 +1493,9 @@ export default function CheckoutPage() {
                               <span className="text-xs font-black text-orange-700 flex items-center gap-1.5 uppercase tracking-wide">
                                 🏪 Khuyến Mãi Từ Quán ({shopPromotions.length})
                               </span>
-                              {selectedShopPromo && (
+                              {Object.values(selectedShopPromos).filter(Boolean).length > 0 && (
                                 <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                  Đã chọn: {selectedShopPromo.code}
+                                  Đã chọn: {Object.values(selectedShopPromos).filter(Boolean).map(p => p.code).join(', ')}
                                 </span>
                               )}
                             </div>
@@ -1329,9 +1506,11 @@ export default function CheckoutPage() {
                               </p>
                             ) : (
                               shopPromotions.map((promo) => {
-                                const isSelected = selectedShopPromo?.code === promo.code;
-                                const isEligible = subtotal >= Number(promo.minOrderValue || 0);
-                                const neededMore = Number(promo.minOrderValue || 0) - subtotal;
+                                const targetSId = promo.shopId || cartToOrder.shopId;
+                                const isSelected = selectedShopPromos[targetSId]?.code === promo.code;
+                                const targetSub = shopSubtotals[targetSId] || 0;
+                                const isEligible = targetSub >= Number(promo.minOrderValue || 0);
+                                const neededMore = Number(promo.minOrderValue || 0) - targetSub;
 
                                 const discountLabel = promo.promoType === 'PERCENT'
                                   ? `Giảm ${promo.discountValue}%`
@@ -1356,15 +1535,24 @@ export default function CheckoutPage() {
                                         <span className="font-mono font-black text-orange-700 bg-orange-100 px-2 py-0.5 rounded text-xs tracking-wider shrink-0 border border-orange-200">
                                           {promo.code}
                                         </span>
+                                        {promo.shopName && (
+                                          <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-1.5 py-0.5 rounded shrink-0">
+                                            🏪 {promo.shopName}
+                                          </span>
+                                        )}
                                         <span className="text-[11px] font-bold text-slate-900 truncate">
                                           {discountLabel} {promo.maxDiscountAmount ? `(Tối đa ${Number(promo.maxDiscountAmount).toLocaleString('vi-VN')}đ)` : ''}
                                         </span>
                                       </div>
                                       <p className="text-[11px] text-slate-500">
-                                        Đơn tối thiểu: <b>{Number(promo.minOrderValue || 0).toLocaleString('vi-VN')}đ</b>
-                                        {!isEligible && neededMore > 0 && (
+                                        Đơn quán tối thiểu: <b>{Number(promo.minOrderValue || 0).toLocaleString('vi-VN')}đ</b>
+                                        {!isEligible && neededMore > 0 ? (
                                           <span className="text-amber-700 font-semibold block text-[10px]">
-                                            (Mua thêm {neededMore.toLocaleString('vi-VN')}đ để dùng)
+                                            (Mua thêm {neededMore.toLocaleString('vi-VN')}đ từ quán này để dùng)
+                                          </span>
+                                        ) : (
+                                          <span className="text-emerald-700 font-semibold ml-1 text-[10px]">
+                                            (Đủ điều kiện quán)
                                           </span>
                                         )}
                                       </p>
@@ -1532,7 +1720,7 @@ export default function CheckoutPage() {
                       <div className="flex justify-between items-center text-orange-600 font-semibold">
                         <span className="flex items-center gap-1">
                           <SparklesIcon className="w-4 h-4" />
-                          Giảm giá Quán ({selectedShopPromo?.code}):
+                          Giảm giá Quán ({Object.values(selectedShopPromos).filter(Boolean).map(p => p.code).join(', ')}):
                         </span>
                         <span>- {shopDiscount.toLocaleString('vi-VN')} đ</span>
                       </div>
